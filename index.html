@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Brunsviga — Dienstplanung</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+
+  <!-- ── Header ── -->
+  <header>
+    <div>
+      <h1>Brunsviga</h1>
+      <div class="subtitle">Personal &amp; Eventplanung</div>
+    </div>
+    <nav>
+      <button data-tab="dashboard" class="active">Dashboard</button>
+      <button data-tab="events">Events</button>
+      <button data-tab="staff">Personal</button>
+      <button data-tab="roster">Dienstplan</button>
+    </nav>
+  </header>
+
+  <main>
+
+    <!-- ══════════════════════════════════════ -->
+    <!-- TAB: DASHBOARD                         -->
+    <!-- ══════════════════════════════════════ -->
+    <div id="tab-dashboard" class="tab-content active">
+
+      <div class="stat-grid">
+        <div class="stat">
+          <div class="stat-number" id="stat-staff">0</div>
+          <div class="stat-label">Aktives Personal</div>
+        </div>
+        <div class="stat">
+          <div class="stat-number" id="stat-events">0</div>
+          <div class="stat-label">Events gesamt</div>
+        </div>
+        <div class="stat">
+          <div class="stat-number" id="stat-upcoming">0</div>
+          <div class="stat-label">Bevorstehend</div>
+        </div>
+        <div class="stat">
+          <div class="stat-number" id="stat-shifts-today">0</div>
+          <div class="stat-label">Schichten heute</div>
+        </div>
+      </div>
+
+      <div class="grid-2">
+        <div class="card">
+          <h2>Nächste Events</h2>
+          <div class="item-list" id="upcoming-events"></div>
+        </div>
+        <div class="card">
+          <h2>Diese Woche</h2>
+          <div class="week-strip" id="week-strip"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ══════════════════════════════════════ -->
+    <!-- TAB: EVENTS                            -->
+    <!-- ══════════════════════════════════════ -->
+    <div id="tab-events" class="tab-content">
+      <div class="section-header">
+        <h2>Events</h2>
+        <div style="display:flex;gap:10px;align-items:center">
+          <select id="events-filter" onchange="renderEvents()" style="width:auto">
+            <option value="upcoming">Bevorstehend</option>
+            <option value="all">Alle</option>
+            <option value="past">Vergangen</option>
+          </select>
+          <button class="btn btn-primary" onclick="openEventModal(null)">+ Neues Event</button>
+        </div>
+      </div>
+      <div class="item-list" id="events-list"></div>
+    </div>
+
+    <!-- ══════════════════════════════════════ -->
+    <!-- TAB: PERSONAL                          -->
+    <!-- ══════════════════════════════════════ -->
+    <div id="tab-staff" class="tab-content">
+      <div class="section-header">
+        <h2>Personal</h2>
+        <button class="btn btn-primary" onclick="openStaffModal(null)">+ Neue Person</button>
+      </div>
+      <div class="item-list" id="staff-list"></div>
+    </div>
+
+    <!-- ══════════════════════════════════════ -->
+    <!-- TAB: DIENSTPLAN                        -->
+    <!-- ══════════════════════════════════════ -->
+    <div id="tab-roster" class="tab-content">
+      <div class="section-header">
+        <h2>Dienstplan</h2>
+        <div style="display:flex;gap:10px;align-items:center">
+          <input type="date" id="roster-date" onchange="renderRoster()" style="width:auto" />
+          <button class="btn btn-ghost" onclick="exportRosterCSV()">CSV Export</button>
+          <button class="btn btn-primary" onclick="openShiftModal(null)">+ Schicht eintragen</button>
+        </div>
+      </div>
+      <table class="roster-table">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Rolle</th>
+            <th>Uhrzeit</th>
+            <th>Event</th>
+            <th>Notiz</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="roster-tbody"></tbody>
+      </table>
+    </div>
+
+  </main>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- MODAL: Personal anlegen / bearbeiten      -->
+<!-- ══════════════════════════════════════════ -->
+<div class="modal-overlay" id="staff-modal">
+  <div class="modal">
+    <h2 id="staff-modal-title">Neues Personal</h2>
+
+    <div class="form-group">
+      <label>Name *</label>
+      <input type="text" id="sf-name" placeholder="Vorname Nachname" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Hauptrolle</label>
+        <select id="sf-role"></select>
+      </div>
+      <div class="form-group">
+        <label>Telefon</label>
+        <input type="tel" id="sf-phone" placeholder="+49 …" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Notizen</label>
+      <textarea id="sf-notes" placeholder="Besonderheiten, Verfügbarkeit, …"></textarea>
+    </div>
+    <div class="form-group" style="flex-direction:row;align-items:center;gap:10px">
+      <input type="checkbox" id="sf-active" style="width:auto" checked />
+      <label for="sf-active" style="text-transform:none;font-size:0.9rem">Aktiv (im Dienstplan verfügbar)</label>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="saveStaffModal()">Speichern</button>
+      <button class="btn btn-ghost" onclick="closeModal('staff-modal')">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- MODAL: Event anlegen / bearbeiten         -->
+<!-- ══════════════════════════════════════════ -->
+<div class="modal-overlay" id="event-modal">
+  <div class="modal">
+    <h2 id="event-modal-title">Neues Event</h2>
+
+    <div class="form-group">
+      <label>Titel *</label>
+      <input type="text" id="ef-title" placeholder="z.B. Kabarettabend mit …" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Datum</label>
+        <input type="date" id="ef-date" />
+      </div>
+      <div class="form-group">
+        <label>Typ</label>
+        <select id="ef-type"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Beginn</label>
+        <input type="time" id="ef-start" />
+      </div>
+      <div class="form-group">
+        <label>Ende</label>
+        <input type="time" id="ef-end" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Notizen</label>
+      <textarea id="ef-notes" placeholder="Infos für das Team, Besonderheiten, …"></textarea>
+    </div>
+
+    <div class="form-group">
+      <label>Benötigtes Personal</label>
+      <div id="required-staff-rows"></div>
+      <button class="btn btn-ghost btn-sm mt8" onclick="addRequiredStaffRow()">+ Rolle hinzufügen</button>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="saveEventModal()">Speichern</button>
+      <button class="btn btn-ghost" onclick="closeModal('event-modal')">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- MODAL: Besetzung (Staff zuweisen)         -->
+<!-- ══════════════════════════════════════════ -->
+<div class="modal-overlay" id="assign-modal">
+  <div class="modal">
+    <h2>Besetzung</h2>
+    <div id="assign-event-name" style="color:var(--text-muted);margin-bottom:8px;font-size:0.9rem"></div>
+    <div id="assign-required-summary"></div>
+    <div class="item-list mt16" id="assign-staff-list"></div>
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="saveAssignModal()">Speichern</button>
+      <button class="btn btn-ghost" onclick="closeModal('assign-modal')">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════ -->
+<!-- MODAL: Schicht eintragen / bearbeiten     -->
+<!-- ══════════════════════════════════════════ -->
+<div class="modal-overlay" id="shift-modal">
+  <div class="modal">
+    <h2 id="shift-modal-title">Neue Schicht</h2>
+
+    <div class="form-group">
+      <label>Person *</label>
+      <select id="shf-staff"></select>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Datum</label>
+        <input type="date" id="shf-date" />
+      </div>
+      <div class="form-group">
+        <label>Rolle</label>
+        <select id="shf-role"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Von</label>
+        <input type="time" id="shf-start" />
+      </div>
+      <div class="form-group">
+        <label>Bis</label>
+        <input type="time" id="shf-end" />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Verknüpftes Event (optional)</label>
+      <select id="shf-event"></select>
+    </div>
+    <div class="form-group">
+      <label>Notiz</label>
+      <input type="text" id="shf-notes" placeholder="z.B. bitte früher kommen" />
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" onclick="saveShiftModal()">Speichern</button>
+      <button class="btn btn-ghost" onclick="closeModal('shift-modal')">Abbrechen</button>
+    </div>
+  </div>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
