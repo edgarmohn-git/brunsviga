@@ -1,0 +1,858 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Brunsviga — Bedienungsanleitung</title>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --surface: #16213e;
+      --surface2: #0f3460;
+      --accent: #e94560;
+      --accent2: #533483;
+      --text: #eaeaea;
+      --text-muted: #aaa;
+      --green: #2ecc71;
+      --amber: #f39c12;
+      --red: #e74c3c;
+      --radius: 8px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      font-size: 16px;
+      line-height: 1.75;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 2px solid var(--accent);
+      padding: 18px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+    header h1 { font-size: 1.4rem; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; }
+    header .sub { font-size: 0.85rem; color: var(--text-muted); margin-top: 2px; }
+    header a {
+      color: var(--accent); text-decoration: none; font-size: 0.9rem;
+      border: 1px solid var(--accent); padding: 7px 16px; border-radius: var(--radius);
+      transition: background 0.15s;
+    }
+    header a:hover { background: var(--accent); color: #fff; }
+
+    .container { max-width: 860px; margin: 0 auto; padding: 40px 24px 80px; }
+
+    /* Hero box */
+    .hero {
+      background: linear-gradient(135deg, #1e1040 0%, #0f3460 100%);
+      border: 1px solid var(--accent2);
+      border-radius: var(--radius);
+      padding: 28px 32px;
+      margin-bottom: 40px;
+    }
+    .hero h2 { font-size: 1.3rem; color: var(--accent); margin-bottom: 10px; }
+    .hero p { color: var(--text-muted); font-size: 0.95rem; }
+    .hero p + p { margin-top: 8px; }
+    .hero strong { color: var(--text); }
+
+    /* TOC */
+    .toc {
+      background: var(--surface); border-radius: var(--radius); padding: 20px 28px;
+      margin-bottom: 40px; border-left: 4px solid var(--accent2);
+    }
+    .toc h2 { font-size: 0.8rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px; }
+    .toc ol { padding-left: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; }
+    .toc li { margin-bottom: 2px; }
+    .toc a { color: var(--accent); text-decoration: none; font-size: 0.92rem; }
+    .toc a:hover { text-decoration: underline; }
+
+    /* Sections */
+    section { margin-bottom: 56px; scroll-margin-top: 20px; }
+    section > h2 {
+      font-size: 1.35rem; color: var(--accent); margin-bottom: 18px;
+      padding-bottom: 12px; border-bottom: 2px solid #2a2a4a;
+      display: flex; align-items: center; gap: 10px;
+    }
+    section > h2 .icon { font-size: 1.2rem; }
+    h3 { font-size: 1rem; color: var(--text); margin: 24px 0 10px; font-weight: 700; }
+    p { margin-bottom: 14px; color: var(--text-muted); }
+    p strong { color: var(--text); }
+    ul, ol { padding-left: 22px; margin-bottom: 14px; color: var(--text-muted); }
+    li { margin-bottom: 6px; }
+    li strong { color: var(--text); }
+
+    /* Steps */
+    .steps { display: flex; flex-direction: column; gap: 10px; margin: 16px 0; }
+    .step {
+      display: flex; gap: 14px; align-items: flex-start;
+      background: var(--surface); border-radius: var(--radius);
+      padding: 14px 16px; border: 1px solid #2a2a4a;
+    }
+    .step-num {
+      background: var(--accent); color: #fff; font-weight: 700; font-size: 0.85rem;
+      width: 30px; height: 30px; border-radius: 50%; display: flex;
+      align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px;
+    }
+    .step-num.green { background: var(--green); }
+    .step-num.purple { background: var(--accent2); }
+    .step-text { flex: 1; }
+    .step-text strong { display: block; color: var(--text); margin-bottom: 3px; font-size: 0.97rem; }
+    .step-text span { font-size: 0.9rem; color: var(--text-muted); }
+
+    /* Info boxes */
+    .box {
+      border-radius: var(--radius); padding: 16px 20px; margin: 18px 0;
+      font-size: 0.92rem; line-height: 1.65;
+    }
+    .box.tip { background: rgba(83,52,131,0.25); border-left: 4px solid var(--accent2); }
+    .box.warn { background: rgba(243,156,18,0.12); border-left: 4px solid var(--amber); }
+    .box.ok { background: rgba(46,204,113,0.1); border-left: 4px solid var(--green); }
+    .box.danger { background: rgba(231,76,60,0.1); border-left: 4px solid var(--red); }
+    .box strong { color: var(--text); display: block; margin-bottom: 4px; }
+    .box p { margin: 0; color: var(--text-muted); }
+    .box p + p { margin-top: 6px; }
+
+    /* Badges */
+    .badge {
+      display: inline-block; padding: 2px 9px; border-radius: 99px;
+      font-size: 0.75rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .badge-green { background: rgba(46,204,113,0.2); color: var(--green); }
+    .badge-amber { background: rgba(243,156,18,0.2); color: var(--amber); }
+    .badge-red { background: rgba(231,76,60,0.2); color: var(--red); }
+    .badge-blue { background: rgba(83,52,131,0.3); color: #a98edd; }
+
+    /* Screen mockup */
+    .mockup {
+      background: var(--surface); border: 1px solid #2a2a4a; border-radius: var(--radius);
+      padding: 16px; margin: 18px 0; font-family: monospace; font-size: 0.82rem;
+      color: var(--text-muted); line-height: 1.6;
+    }
+    .mockup .bar {
+      background: var(--surface2); border-radius: 4px; padding: 6px 10px;
+      margin-bottom: 10px; font-size: 0.78rem; color: var(--text-muted);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .mockup .bar span { color: var(--accent); font-weight: 700; font-family: sans-serif; }
+    .mockup .highlight { color: var(--text); font-weight: 700; }
+    .mockup .accent { color: var(--accent); }
+    .mockup .green { color: var(--green); }
+    .mockup .purple { color: #a98edd; }
+    .mockup .muted { color: #555; }
+
+    /* Definition list */
+    dl { display: grid; grid-template-columns: 180px 1fr; gap: 10px 16px; margin: 12px 0 18px; }
+    dt { font-weight: 700; color: var(--text); font-size: 0.92rem; padding-top: 1px; }
+    dd { color: var(--text-muted); font-size: 0.92rem; }
+
+    /* Flow */
+    .flow { display: flex; align-items: center; gap: 0; flex-wrap: wrap; margin: 20px 0; gap: 4px; }
+    .flow-box {
+      background: var(--surface2); border-radius: var(--radius);
+      padding: 9px 16px; font-size: 0.88rem; font-weight: 600;
+    }
+    .flow-arrow { color: var(--accent); font-size: 1.3rem; padding: 0 4px; }
+
+    /* FAQ */
+    .faq-item {
+      background: var(--surface); border-radius: var(--radius);
+      border: 1px solid #2a2a4a; margin-bottom: 10px; overflow: hidden;
+    }
+    .faq-q {
+      padding: 14px 18px; font-weight: 700; font-size: 0.95rem;
+      cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+    }
+    .faq-q:hover { color: var(--accent); }
+    .faq-a {
+      padding: 0 18px 14px; color: var(--text-muted); font-size: 0.92rem;
+      border-top: 1px solid #2a2a4a; padding-top: 12px;
+    }
+
+    /* Password screen illustration */
+    .pw-screen {
+      background: #0d0d1a; border: 2px solid var(--accent2); border-radius: var(--radius);
+      padding: 32px; text-align: center; margin: 20px 0; max-width: 380px;
+    }
+    .pw-screen h3 { color: var(--accent); font-size: 1.1rem; margin-bottom: 6px; }
+    .pw-screen .sub { color: var(--text-muted); font-size: 0.8rem; margin-bottom: 20px; }
+    .pw-field {
+      background: #1a1a2e; border: 1px solid #533483; border-radius: 6px;
+      padding: 10px 14px; color: var(--text-muted); font-size: 0.9rem;
+      text-align: left; margin-bottom: 12px; letter-spacing: 3px;
+    }
+    .pw-btn {
+      background: var(--accent); color: #fff; border-radius: 6px;
+      padding: 10px 28px; font-weight: 700; font-size: 0.9rem; display: inline-block;
+    }
+
+    hr { border: none; border-top: 1px solid #2a2a4a; margin: 40px 0; }
+
+    footer {
+      text-align: center; padding: 24px; color: #555; font-size: 0.8rem;
+      border-top: 1px solid #2a2a4a; margin-top: 40px;
+    }
+
+    @media (max-width: 600px) {
+      .toc ol { grid-template-columns: 1fr; }
+      dl { grid-template-columns: 1fr; }
+      .flow { flex-direction: column; align-items: flex-start; }
+      header { padding: 14px 16px; }
+      .container { padding: 24px 16px 60px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>Brunsviga</h1>
+    <div class="sub">Bedienungsanleitung · Personal &amp; Eventplanung</div>
+  </div>
+  <a href="index.html">Zur App &rarr;</a>
+</header>
+
+<div class="container">
+
+  <!-- Hero -->
+  <div class="hero">
+    <h2>Willkommen bei der Brunsviga-Planung</h2>
+    <p>Diese App hilft dabei, <strong>Events zu verwalten</strong>, <strong>Personal einzuteilen</strong> und <strong>Dienstpläne zu organisieren</strong> — alles an einem Ort, direkt im Browser.</p>
+    <p>Du brauchst nichts zu installieren. Kein Account, kein Login (außer dem einmaligen Passwort beim ersten Öffnen). Die App funktioniert komplett im Browser und speichert alle Daten direkt auf deinem Gerät.</p>
+    <p><strong>Alle Veranstaltungen aus dem aktuellen Brunsviga-Programm sind bereits voreingetragen</strong> — du kannst sofort loslegen.</p>
+  </div>
+
+  <!-- TOC -->
+  <div class="toc">
+    <h2>Inhalt dieser Anleitung</h2>
+    <ol>
+      <li><a href="#zugang">Zugang zur App</a></li>
+      <li><a href="#ueberblick">Was die App kann</a></li>
+      <li><a href="#erster-start">Erster Start</a></li>
+      <li><a href="#personal">Personal verwalten</a></li>
+      <li><a href="#events">Events &amp; Veranstaltungen</a></li>
+      <li><a href="#besetzung">Besetzung zuweisen</a></li>
+      <li><a href="#dienstplan">Dienstplan &amp; Schichten</a></li>
+      <li><a href="#dashboard">Dashboard verstehen</a></li>
+      <li><a href="#export">CSV-Export &amp; Sicherung</a></li>
+      <li><a href="#daten">Datenspeicherung — wichtig!</a></li>
+      <li><a href="#workflow">Empfohlener Wochenablauf</a></li>
+      <li><a href="#faq">Häufige Fragen</a></li>
+    </ol>
+  </div>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <section id="zugang">
+    <h2><span class="icon">🔐</span> 1. Zugang zur App</h2>
+
+    <p>Die App ist passwortgeschützt, damit niemand Fremdes die Planungsdaten einsehen kann. Beim ersten Öffnen erscheint ein Passwort-Bildschirm.</p>
+
+    <div style="display:flex; justify-content:center; margin: 28px 0;">
+      <div class="pw-screen">
+        <h3>Brunsviga</h3>
+        <div class="sub">Personal &amp; Eventplanung</div>
+        <div class="pw-field">● ● ● ● ● ● ● ●</div>
+        <div class="pw-btn">Öffnen</div>
+      </div>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          <strong>Link öffnen</strong>
+          <span>Klicke auf den Link, den du per Signal, WhatsApp oder E-Mail erhalten hast. Der Link öffnet sich im Browser (Chrome, Firefox, Safari — alle funktionieren).</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          <strong>Passwort eingeben</strong>
+          <span>Gib das vereinbarte Passwort ein. Groß- und Kleinschreibung sind wichtig. Wenn du das Passwort nicht kennst — frag André.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          <strong>„Decrypt" oder Enter drücken</strong>
+          <span>Bei richtigem Passwort öffnet sich sofort die App. Bei falschem Passwort erscheint eine Fehlermeldung — einfach nochmal versuchen.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="box tip">
+      <strong>Tipp: Link als Lesezeichen speichern</strong>
+      <p>Speichere den Link als Lesezeichen in deinem Browser (Strg+D / Cmd+D). So hast du die App immer sofort zur Hand, ohne den Link suchen zu müssen.</p>
+    </div>
+
+    <div class="box warn">
+      <strong>Passwort vergessen?</strong>
+      <p>Das Passwort ist nicht in der App gespeichert — nur du und André kennen es. Bei Verlust einfach André fragen, der kann ein neues vergeben.</p>
+    </div>
+
+    <h3>Auf welchen Geräten funktioniert die App?</h3>
+    <p>Die App funktioniert auf <strong>jedem Gerät mit einem modernen Browser</strong>:</p>
+    <ul>
+      <li>Computer / Laptop (Windows, Mac, Linux)</li>
+      <li>Tablet (iPad, Android)</li>
+      <li>Smartphone (iPhone, Android) — eingeschränkt empfohlen, da die Tabellen auf kleinen Bildschirmen etwas eng werden</li>
+    </ul>
+    <p>Am besten eignet sich ein <strong>Laptop oder Desktop-PC</strong> für die tägliche Planung.</p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <section id="ueberblick">
+    <h2><span class="icon">🗺</span> 2. Was die App kann</h2>
+
+    <p>Die App hat vier Bereiche, zwischen denen du oben rechts wechselst:</p>
+
+    <dl>
+      <dt>📊 Dashboard</dt>
+      <dd>Dein Überblick: Was passiert diese Woche? Wie viele Events stehen an? Sind alle Stellen besetzt? Auf einen Blick.</dd>
+      <dt>🎭 Events</dt>
+      <dd>Alle Veranstaltungen — anlegen, bearbeiten, löschen. Du siehst, welche Events noch nicht ausreichend besetzt sind.</dd>
+      <dt>👤 Personal</dt>
+      <dd>Deine Mitarbeiterinnen und Mitarbeiter. Wer ist verfügbar? Welche Rolle hat wer? Telefonnummern und Notizen.</dd>
+      <dt>📋 Dienstplan</dt>
+      <dd>Wer arbeitet wann? Hier trägst du genaue Schichten ein — mit Uhrzeit, Rolle und optionaler Verknüpfung zum Event.</dd>
+    </dl>
+
+    <div class="box ok">
+      <strong>Gut zu wissen: Alle Brunsviga-Events sind bereits drin!</strong>
+      <p>Das komplette Programm von der Brunsviga-Website (März bis September 2026) wurde automatisch eingetragen. Du musst nur noch dein Personal anlegen und die Besetzung vergeben.</p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <section id="erster-start">
+    <h2><span class="icon">🚀</span> 3. Erster Start — So gehst du vor</h2>
+
+    <p>Wenn du die App zum ersten Mal öffnest, siehst du das Dashboard mit allen voreingetragenen Events. Noch kein Personal angelegt, noch keine Besetzung.</p>
+
+    <p>So ist der empfohlene Start:</p>
+
+    <div class="flow">
+      <div class="flow-box">① Personal anlegen</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box">② Events prüfen</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box">③ Besetzung vergeben</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-box">④ Schichten eintragen</div>
+    </div>
+
+    <p>Das klingt nach viel — ist aber einfacher als es aussieht. Lies die folgenden Abschnitte Schritt für Schritt durch.</p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <section id="personal">
+    <h2><span class="icon">👤</span> 4. Personal verwalten</h2>
+
+    <p>Hier trägst du alle Personen ein, die bei der Brunsviga arbeiten oder arbeiten könnten. Das ist der erste Schritt, bevor du irgendetwas anderes machen kannst — denn ohne Personal kann man keine Besetzung erstellen.</p>
+
+    <h3>Neue Person anlegen</h3>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num green">1</div>
+        <div class="step-text">
+          <strong>Tab „Personal" anklicken</strong>
+          <span>Oben rechts in der Navigation auf „Personal" klicken. Die Seite zeigt dir alle bisher angelegten Personen — am Anfang ist sie leer.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">2</div>
+        <div class="step-text">
+          <strong>„+ Neue Person" klicken</strong>
+          <span>Der rote Button oben rechts. Ein Formular öffnet sich über dem Bildschirm (ein sogenanntes „Modal").</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">3</div>
+        <div class="step-text">
+          <strong>Name eingeben (Pflichtfeld)</strong>
+          <span>Vorname und Nachname — oder wie die Person intern genannt wird. Nur der Name ist wirklich Pflicht, alles andere ist optional.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">4</div>
+        <div class="step-text">
+          <strong>Hauptrolle wählen</strong>
+          <span>Die Rolle, die diese Person am häufigsten übernimmt: z. B. Barkeeper, Service, Technik, Kasse usw. Das ist nur ein Standard — du kannst pro Schicht eine andere Rolle vergeben.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">5</div>
+        <div class="step-text">
+          <strong>Telefonnummer und Notizen (optional)</strong>
+          <span>Handynummer für schnellen Kontakt. Im Notizfeld kannst du wichtige Infos festhalten: z. B. „nur freitags verfügbar", „Springer für alle Bereiche", „kommt aus Wolfenbüttel, braucht ÖPNV-Infos".</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num green">6</div>
+        <div class="step-text">
+          <strong>„Speichern" klicken</strong>
+          <span>Die Person erscheint jetzt in der Liste und kann ab sofort in Besetzung und Dienstplan verwendet werden.</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>Aktiv / Inaktiv — Was bedeutet das?</h3>
+    <p>Jede Person hat einen Haken <strong>„Aktiv"</strong>. Solange der Haken gesetzt ist, taucht die Person in allen Auswahllisten auf. Wenn du den Haken entfernst, wird die Person als <strong>inaktiv</strong> markiert — sie verschwindet aus den Listen, aber alle bisherigen Schichten und Zuweisungen bleiben erhalten.</p>
+
+    <p>Das ist nützlich für:</p>
+    <ul>
+      <li>Saisonkräfte, die nur manchmal verfügbar sind</li>
+      <li>Personen, die vorübergehend krank oder im Urlaub sind</li>
+      <li>Ehemalige Mitarbeiter, deren Schichthistorie du behalten möchtest</li>
+    </ul>
+
+    <h3>Person bearbeiten oder löschen</h3>
+    <p>In der Personalliste siehst du neben jeder Person zwei Buttons:</p>
+    <ul>
+      <li><strong>„Bearbeiten"</strong> — öffnet das Formular wieder, du kannst alles ändern</li>
+      <li><strong>„✕"</strong> (roter Button) — löscht die Person nach einer Sicherheitsabfrage. <em>Achtung: Dabei werden auch alle Schichten dieser Person gelöscht.</em></li>
+    </ul>
+
+    <div class="box tip">
+      <strong>Tipp: Lieber inaktiv als löschen</strong>
+      <p>Wenn jemand die Brunsviga verlässt, setze die Person auf „inaktiv" statt sie zu löschen. So bleibt die Schichthistorie erhalten, und wenn die Person zurückkommt, ist sie sofort wieder verfügbar.</p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <section id="events">
+    <h2><span class="icon">🎭</span> 5. Events &amp; Veranstaltungen</h2>
+
+    <p>Im Tab „Events" findest du alle Veranstaltungen der Brunsviga. Das komplette Programm bis September 2026 ist bereits voreingetragen — du kannst es jederzeit ergänzen oder anpassen.</p>
+
+    <h3>Neues Event anlegen</h3>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num purple">1</div>
+        <div class="step-text">
+          <strong>Tab „Events" öffnen, dann „+ Neues Event"</strong>
+          <span>Das Formular öffnet sich.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num purple">2</div>
+        <div class="step-text">
+          <strong>Titel eingeben</strong>
+          <span>Der Name der Veranstaltung, z. B. „Kabarettabend – Müller &amp; Co." oder „Weihnachtsfeier". Pflichtfeld.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num purple">3</div>
+        <div class="step-text">
+          <strong>Datum und Zeiten setzen</strong>
+          <span>Datum anklicken, im Kalender wählen. Beginn und Ende der Veranstaltung eintragen — z. B. 20:00 bis 23:30.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num purple">4</div>
+        <div class="step-text">
+          <strong>Event-Typ wählen</strong>
+          <span>Konzert, Comedy, Theater, Kabarett, Party, Lesung, Workshop, Probe oder Sonstiges. Hilft beim schnellen Überblick.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num purple">5</div>
+        <div class="step-text">
+          <strong>Notizen eintragen (optional)</strong>
+          <span>Infos für das Team: Besonderheiten, technische Anforderungen, Gästeliste, Catering-Wünsche usw.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num purple">6</div>
+        <div class="step-text">
+          <strong>Benötigtes Personal definieren</strong>
+          <span>Über „+ Rolle hinzufügen" legst du fest, wie viele Personen welcher Rolle du brauchst. Beispiel: 2× Service, 1× Kasse, 1× Technik. So siehst du später auf einen Blick, ob das Event ausreichend besetzt ist.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num purple">7</div>
+        <div class="step-text">
+          <strong>Speichern</strong>
+          <span>Das Event erscheint in der Liste. Im nächsten Schritt kannst du konkrete Personen zuweisen.</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>Was bedeuten die farbigen Status-Badges?</h3>
+    <p>Neben jedem Event siehst du einen farbigen Badge, der dir auf einen Blick zeigt, wie es um die Besetzung steht:</p>
+
+    <div style="display:flex; flex-direction:column; gap:10px; margin:16px 0;">
+      <div class="step" style="border-left: 3px solid var(--green);">
+        <div style="width:24px; height:24px; background:rgba(46,204,113,0.2); border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:0.8rem; color:var(--green)">✓</div>
+        <div class="step-text">
+          <strong><span class="badge badge-green">Besetzt</span> — Alles in Ordnung</strong>
+          <span>Alle benötigten Rollen sind vergeben. Du kannst entspannt den nächsten Schritt (Schichten eintragen) angehen.</span>
+        </div>
+      </div>
+      <div class="step" style="border-left: 3px solid var(--amber);">
+        <div style="width:24px; height:24px; background:rgba(243,156,18,0.2); border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:0.8rem; color:var(--amber)">!</div>
+        <div class="step-text">
+          <strong><span class="badge badge-amber">3/4</span> — Teilweise besetzt</strong>
+          <span>Einige Personen sind eingetragen, aber noch nicht alle Stellen gefüllt. Die Zahl zeigt: 3 von 4 Benötigten sind vergeben.</span>
+        </div>
+      </div>
+      <div class="step" style="border-left: 3px solid var(--red);">
+        <div style="width:24px; height:24px; background:rgba(231,76,60,0.2); border-radius:50%; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:0.8rem; color:var(--red)">✗</div>
+        <div class="step-text">
+          <strong><span class="badge badge-red">0/3</span> — Noch niemand eingeteilt</strong>
+          <span>Für dieses Event ist noch kein Personal vergeben. Dringend kümmern!</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>Events filtern</h3>
+    <p>Über das Dropdown-Menü oben rechts kannst du zwischen drei Ansichten wechseln:</p>
+    <ul>
+      <li><strong>Bevorstehend</strong> — nur Events ab heute (Standard)</li>
+      <li><strong>Vergangen</strong> — Events die bereits stattgefunden haben</li>
+      <li><strong>Alle</strong> — kompletter Überblick</li>
+    </ul>
+
+    <div class="box tip">
+      <strong>Voreingetragene Events anpassen</strong>
+      <p>Die bereits eingetragenen Events haben noch keine Besetzung und keine „benötigtes Personal"-Angaben. Klicke auf „Bearbeiten" bei einem Event und trage unter „Benötigtes Personal" ein, wie viele Leute du pro Rolle brauchst. Das gibt dir den farbigen Status-Badge.</p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <section id="besetzung">
+    <h2><span class="icon">✅</span> 6. Besetzung zuweisen</h2>
+
+    <p>Die Besetzung ist der Kern der Planung: Hier legst du fest, <strong>wer bei welchem Event dabei ist</strong>. Das ist die schnelle, übergeordnete Zuweisung — die genauen Uhrzeiten der einzelnen Personen trägst du dann im Dienstplan ein.</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          <strong>Im Tab „Events" auf „Besetzung" klicken</strong>
+          <span>Neben jedem Event gibt es einen lila „Besetzung"-Button. Ein Dialog öffnet sich.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          <strong>Was du siehst</strong>
+          <span>Oben der Event-Name und das Datum, darunter ein Überblick über die benötigten Rollen. Dann folgt die Liste aller aktiven Mitarbeiter mit einem Haken-Feld vor dem Namen.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          <strong>Personen anhaken</strong>
+          <span>Klicke auf den Haken neben allen Personen, die bei diesem Event arbeiten. Du kannst beliebig viele wählen. Bereits ausgewählte Personen haben einen gesetzten Haken.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-text">
+          <strong>„Speichern" klicken</strong>
+          <span>Der Badge neben dem Event aktualisiert sich sofort. Wenn du alle benötigten Stellen besetzt hast, wird er grün.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="box tip">
+      <strong>Besetzung und Dienstplan — was ist der Unterschied?</strong>
+      <p>Die <strong>Besetzung</strong> sagt: „Diese Person ist prinzipiell bei diesem Event dabei." Der <strong>Dienstplan</strong> sagt: „Diese Person ist an diesem Tag von 18:00 bis 23:30 im Einsatz." Beides zusammen ergibt die vollständige Planung.</p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <section id="dienstplan">
+    <h2><span class="icon">📋</span> 7. Dienstplan &amp; Schichten</h2>
+
+    <p>Im Dienstplan trägst du für jeden Tag ein, wer wann arbeitet — mit genauen Anfangs- und Endzeiten. So entsteht der eigentliche Dienstplan, den du auch als Excel-Datei exportieren kannst.</p>
+
+    <h3>Einen Tag aufrufen</h3>
+    <p>Oben rechts im Dienstplan-Tab befindet sich ein <strong>Datumsfeld</strong>. Klicke darauf und wähle den Tag, für den du Schichten eintragen möchtest. Die Tabelle darunter zeigt immer nur den ausgewählten Tag.</p>
+
+    <h3>Neue Schicht eintragen</h3>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          <strong>„+ Schicht eintragen" klicken</strong>
+          <span>Der Button oben rechts. Ein Formular öffnet sich.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          <strong>Person wählen</strong>
+          <span>Aus der Dropdown-Liste wählst du, für wen du die Schicht einträgst. Nur aktive Personen werden angezeigt.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          <strong>Datum und Uhrzeit festlegen</strong>
+          <span>Das Datum ist bereits auf den aktuell angezeigten Tag vorbelegt. „Von" und „Bis" sind die Arbeitszeiten, z. B. 18:00 bis 23:30.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-text">
+          <strong>Rolle festlegen</strong>
+          <span>Welche Aufgabe hat die Person an diesem Tag? Das kann von der Hauptrolle abweichen — z. B. springt jemand als Kasse ein, obwohl sie normalerweise Service macht.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">5</div>
+        <div class="step-text">
+          <strong>Event verknüpfen (optional)</strong>
+          <span>Wenn an diesem Tag ein Event stattfindet, wird es hier automatisch zur Auswahl angeboten. So siehst du im Dienstplan sofort, zu welcher Veranstaltung die Schicht gehört.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">6</div>
+        <div class="step-text">
+          <strong>Notiz (optional)</strong>
+          <span>Kurzinfo für die Person oder für dich, z. B. „bitte 30 Min. früher kommen" oder „Schlüssel vom Vorraum holen".</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">7</div>
+        <div class="step-text">
+          <strong>Speichern</strong>
+          <span>Die Schicht erscheint in der Tabelle, nach Uhrzeit sortiert. Für weitere Personen am selben Tag einfach wiederholen.</span>
+        </div>
+      </div>
+    </div>
+
+    <h3>Schichten bearbeiten und löschen</h3>
+    <p>Am Ende jeder Zeile in der Dienstplan-Tabelle findest du zwei Buttons:</p>
+    <ul>
+      <li><strong>✏</strong> — Bearbeiten: Öffnet das Formular, alle Felder können geändert werden</li>
+      <li><strong>✕</strong> — Löschen: Nach einer kurzen Rückfrage wird die Schicht entfernt</li>
+    </ul>
+
+    <div class="box warn">
+      <strong>Wichtig: Der Dienstplan zeigt immer nur einen Tag</strong>
+      <p>Wenn du andere Tage prüfen oder bearbeiten möchtest, musst du oben rechts das Datum wechseln. Die Ansicht aktualisiert sich automatisch.</p>
+    </div>
+  </section>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <section id="dashboard">
+    <h2><span class="icon">📊</span> 8. Das Dashboard verstehen</h2>
+
+    <p>Das Dashboard ist die Startseite der App — der erste Blick beim Öffnen. Es zeigt dir einen schnellen Überblick ohne viel Klicken.</p>
+
+    <h3>Die vier Zahlen oben</h3>
+    <dl>
+      <dt>Aktives Personal</dt>
+      <dd>Wie viele Personen aktuell auf „aktiv" gesetzt sind — also im Einsatz verfügbar.</dd>
+      <dt>Events gesamt</dt>
+      <dd>Alle eingetragenen Veranstaltungen, egal ob vergangen oder zukünftig.</dd>
+      <dt>Bevorstehend</dt>
+      <dd>Wie viele Events ab heute noch kommen. Klicke auf einen Event in der Liste darunter für Details.</dd>
+      <dt>Schichten heute</dt>
+      <dd>Wie viele Schichten für den heutigen Tag eingetragen sind — praktisch als schneller Check am Morgen.</dd>
+    </dl>
+
+    <h3>Nächste Events (linke Karte)</h3>
+    <p>Die fünf nächsten bevorstehenden Events werden hier aufgelistet, mit Datum, Uhrzeit und Besetzungsstatus. Ein Klick auf „Details" öffnet das Event direkt zum Bearbeiten.</p>
+
+    <h3>Diese Woche (rechte Karte)</h3>
+    <p>Ein Wochenstreifen zeigt die nächsten 7 Tage. Tage mit Events haben farbige Balken — ein Klick auf einen Balken öffnet das Event direkt. Der aktuelle Tag ist hervorgehoben.</p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <section id="export">
+    <h2><span class="icon">📥</span> 9. CSV-Export &amp; Sicherung</h2>
+
+    <p>Du kannst den kompletten Dienstplan jederzeit als Tabellendatei herunterladen — praktisch für Excel, Google Sheets oder zum Ausdrucken.</p>
+
+    <h3>So geht's</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-text">
+          <strong>Tab „Dienstplan" öffnen</strong>
+          <span></span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-text">
+          <strong>„CSV Export" klicken</strong>
+          <span>Der Button befindet sich oben rechts, neben dem Datumsfeld. Es wird sofort eine Datei heruntergeladen.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-text">
+          <strong>Datei öffnen</strong>
+          <span>Die Datei heißt <em>brunsviga-dienstplan-DATUM.csv</em>. Öffne sie mit Excel (Doppelklick), Google Sheets (per Import) oder Numbers auf dem Mac.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="box ok">
+      <strong>Der Export enthält alle Schichten — nicht nur die des aktuellen Tages</strong>
+      <p>Egal welcher Tag gerade im Dienstplan angezeigt wird: Der Export gibt immer den kompletten Dienstplan mit allen eingetragenen Schichten aus, sortiert nach Datum und Uhrzeit.</p>
+    </div>
+
+    <h3>Was steht in der Datei?</h3>
+    <p>Jede Zeile ist eine Schicht, mit folgenden Spalten:</p>
+    <dl>
+      <dt>Datum</dt><dd>Tag der Schicht</dd>
+      <dt>Name</dt><dd>Die eingeteilte Person</dd>
+      <dt>Rolle</dt><dd>Ihre Aufgabe an diesem Tag</dd>
+      <dt>Von / Bis</dt><dd>Arbeitszeiten</dd>
+      <dt>Event</dt><dd>Die verknüpfte Veranstaltung (falls eingetragen)</dd>
+      <dt>Notiz</dt><dd>Deine Notiz zur Schicht</dd>
+    </dl>
+  </section>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <section id="daten">
+    <h2><span class="icon">💾</span> 10. Datenspeicherung — wichtig zu wissen!</h2>
+
+    <p>Dieser Abschnitt ist wichtig. Bitte einmal kurz lesen — es erspart später Frust.</p>
+
+    <div class="box ok">
+      <strong>Deine Daten gehören dir</strong>
+      <p>Alle Daten werden ausschließlich auf deinem eigenen Gerät gespeichert, im sogenannten „Browser-Speicher" (LocalStorage). Es gibt keinen Server, keine Cloud, keinen Account. Niemand außer dir kann auf deine Daten zugreifen.</p>
+    </div>
+
+    <div class="box warn">
+      <strong>Gleicher Browser = gleiche Daten</strong>
+      <p>Wenn du die App auf dem Laptop in Chrome öffnest und danach auf dem Handy in Safari, siehst du dort <em>andere</em> Daten — nämlich gar keine. Jedes Gerät und jeder Browser hat seinen eigenen Speicher.</p>
+      <p><strong>Empfehlung:</strong> Nutze die App immer auf demselben Gerät und im selben Browser. Am besten auf dem Computer, der sowieso immer läuft.</p>
+    </div>
+
+    <div class="box danger">
+      <strong>Browser-Cache leeren = Datenverlust!</strong>
+      <p>Wenn du im Browser den Verlauf, Cache oder die Cookies löschst, können dabei auch die App-Daten verloren gehen. Das passiert nicht von selbst — aber wenn du es manuell machst oder jemand anderes am Gerät so etwas tut, sind die Daten weg.</p>
+      <p><strong>Schutz dagegen:</strong> Mache regelmäßig einen CSV-Export (z. B. einmal pro Woche). Den kannst du auf dem Desktop oder in einem Ordner ablegen — und wenn mal etwas verloren geht, hast du zumindest den Dienstplan als Datei.</p>
+    </div>
+
+    <h3>Kurzfassung</h3>
+    <ul>
+      <li>Daten sind <strong>sicher und privat</strong> — nur auf deinem Gerät</li>
+      <li>Immer <strong>gleichen Browser auf gleichem Gerät</strong> verwenden</li>
+      <li>Regelmäßig <strong>CSV exportieren</strong> als Sicherung</li>
+      <li>App funktioniert auch <strong>ohne Internet</strong></li>
+    </ul>
+  </section>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <section id="workflow">
+    <h2><span class="icon">📅</span> 11. Empfohlener Wochenablauf</h2>
+
+    <p>Wenn du die App regelmäßig nutzt, empfiehlt sich dieser Rhythmus:</p>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num" style="background:#2ecc71;font-size:0.75rem">Mo</div>
+        <div class="step-text">
+          <strong>Woche prüfen</strong>
+          <span>Dashboard aufrufen. Welche Events stehen diese Woche an? Sind sie ausreichend besetzt? Die roten oder orangefarbenen Badges zeigen sofort, wo Handlungsbedarf besteht.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:#27ae60;font-size:0.75rem">Di</div>
+        <div class="step-text">
+          <strong>Besetzung vergeben</strong>
+          <span>Für alle Events der Woche Personal einteilen — über den „Besetzung"-Button im Events-Tab. Personen anhaken, speichern.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:#f39c12;font-size:0.75rem">Mi</div>
+        <div class="step-text">
+          <strong>Schichten eintragen</strong>
+          <span>Im Dienstplan für jeden Event-Tag die genauen Uhrzeiten eintragen. Tag für Tag durchgehen, Schichten anlegen.</span>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num" style="background:#e74c3c;font-size:0.75rem">Fr</div>
+        <div class="step-text">
+          <strong>Exportieren &amp; Sichern</strong>
+          <span>CSV-Export herunterladen und irgendwo ablegen. Optional: an das Team schicken oder ausdrucken.</span>
+        </div>
+      </div>
+    </div>
+
+    <p>Das kostet nach der Einarbeitung vielleicht 15–30 Minuten pro Woche — je nachdem wie viele Events und Schichten anfallen.</p>
+  </section>
+
+  <!-- ══════════════════════════════════════════════ -->
+  <section id="faq">
+    <h2><span class="icon">❓</span> 12. Häufige Fragen</h2>
+
+    <div class="faq-item">
+      <div class="faq-q">Die App zeigt nach dem Passwort eine leere Seite — was tun?</div>
+      <div class="faq-a">Seite neu laden (F5 oder Cmd+R). Manchmal hilft auch: Browser schließen, neu öffnen, Link erneut eingeben und Passwort nochmal eingeben.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q">Ich habe das Passwort vergessen. Wie komme ich rein?</div>
+      <div class="faq-a">Das Passwort ist nirgendwo in der App gespeichert. Wende dich an André — er kann ein neues Passwort vergeben und dir den aktualisierten Link schicken.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q">Ich habe versehentlich ein Event gelöscht. Kann ich es wiederherstellen?</div>
+      <div class="faq-a">Leider nein — es gibt keine Rückgängig-Funktion. Wenn es ein voreingetragenes Event war (aus dem Brunsviga-Programm), kann André es erneut einspielen. Eigens angelegte Events müssen neu eingetragen werden. Tipp: Vor dem Löschen kurz innehalten und die Sicherheitsfrage genau lesen.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q">Kann ich die App auf meinem Handy nutzen?</div>
+      <div class="faq-a">Ja, aber eingeschränkt. Auf kleinen Bildschirmen werden manche Tabellen etwas eng. Am besten für die tägliche Planung einen Laptop oder Desktop-PC verwenden und das Handy nur für schnelle Nachschauen.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q">Kann mein Kollege / meine Kollegin auch auf die App zugreifen?</div>
+      <div class="faq-a">Ja, mit demselben Link und Passwort. Aber Achtung: Jede Person hat ihren eigenen Datenspeicher im Browser. Was du auf deinem Laptop einträgst, sieht die andere Person auf ihrem Gerät nicht — die App ist nicht live synchronisiert. Die App eignet sich daher am besten für eine zentrale Person, die den Plan pflegt.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q">Die Seite lädt, aber ich sehe keine Events — obwohl ich schon alles eingetragen hatte.</div>
+      <div class="faq-a">Wahrscheinlich wurde ein anderer Browser oder ein anderes Gerät geöffnet. Prüfe, ob du denselben Browser auf demselben Computer verwendest wie beim letzten Mal. Wenn du regelmäßig CSV-Exporte gemacht hast, sind die Daten dort noch vorhanden.</div>
+    </div>
+
+    <div class="faq-item">
+      <div class="faq-q">Kann man der App neue Funktionen hinzufügen?</div>
+      <div class="faq-a">Ja! Die App wird von André betreut und kann jederzeit erweitert werden. Wenn du dir etwas wünschst — z. B. eine Wochenübersicht, automatische Erinnerungen, Druckansicht oder Personalverfügbarkeiten — einfach Bescheid geben.</div>
+    </div>
+
+    <hr />
+
+    <p style="color:var(--text-muted); font-size:0.9rem; text-align:center;">
+      Weitere Fragen? Meld dich bei André — er hilft gerne.
+    </p>
+  </section>
+
+</div>
+
+<footer>
+  Brunsviga Dienstplanung &mdash; Alle Daten bleiben auf deinem Gerät. Kein Server, keine Cloud.
+</footer>
+
+<script>
+  // FAQ toggle
+  document.querySelectorAll('.faq-q').forEach(q => {
+    const a = q.nextElementSibling;
+    a.style.display = 'none';
+    q.addEventListener('click', () => {
+      const open = a.style.display !== 'none';
+      document.querySelectorAll('.faq-a').forEach(x => x.style.display = 'none');
+      if (!open) a.style.display = 'block';
+    });
+  });
+</script>
+
+</body>
+</html>

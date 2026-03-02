@@ -3,7 +3,10 @@
 // Vanilla JS, localStorage persistence
 // ──────────────────────────────────────────────
 
-const STORE_KEY = 'brunsviga_data';
+const STORE_KEY      = 'brunsviga_data';
+const GIST_TOKEN_KEY = 'brunsviga_gist_token';
+const GIST_ID_KEY    = 'brunsviga_gist_id';
+const GIST_FILE      = 'brunsviga-data.json';
 
 const ROLES = [
   'Leitung', 'Barkeeper', 'Service', 'Kasse', 'Technik',
@@ -18,17 +21,21 @@ const EVENT_TYPES = [
 // ── State ─────────────────────────────────────
 
 let data = {
+  lastModified: 0,
   staff: [],       // { id, name, role, phone, notes, active }
   events: [],      // { id, title, date, start, end, type, notes, requiredStaff[], assignedStaff[] }
   shifts: [],      // { id, staffId, eventId|null, date, start, end, role, notes }
 };
 
 let editingId = null; // used by modals
+let gistTimer  = null; // debounce handle for Gist sync
 
 // ── Persistence ───────────────────────────────
 
 function save() {
+  data.lastModified = Date.now();
   localStorage.setItem(STORE_KEY, JSON.stringify(data));
+  scheduleGistSync();
 }
 
 function load() {
@@ -36,6 +43,124 @@ function load() {
   if (raw) {
     try { data = JSON.parse(raw); } catch(e) { console.warn('Load failed', e); }
   }
+  // Beim allerersten Start: Programm von brunsviga-kulturzentrum.de einspielen
+  if (data.events.length === 0 && typeof getSeedEvents === 'function') {
+    data.events = getSeedEvents();
+    data.lastModified = Date.now();
+    localStorage.setItem(STORE_KEY, JSON.stringify(data));
+  }
+}
+
+// ── GitHub Gist Sync ───────────────────────────
+
+function setSyncStatus(status, msg) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  const cfg = {
+    idle:    { icon: '☁', color: '#555' },
+    syncing: { icon: '↑', color: '#f39c12' },
+    synced:  { icon: '✓', color: '#2ecc71' },
+    error:   { icon: '✗', color: '#e74c3c' },
+  }[status] || { icon: '?', color: '#888' };
+  el.innerHTML = `<span style="color:${cfg.color};font-size:0.82rem">${cfg.icon} ${msg || ''}</span>`;
+}
+
+async function pushToGist() {
+  const token  = localStorage.getItem(GIST_TOKEN_KEY);
+  let   gistId = localStorage.getItem(GIST_ID_KEY);
+  if (!token) return;
+
+  setSyncStatus('syncing', 'Speichere…');
+  const payload = {
+    files: { [GIST_FILE]: { content: JSON.stringify(data, null, 2) } },
+  };
+  if (!gistId) {
+    payload.description = 'Brunsviga Dienstplan Backup';
+    payload.public = false;
+  }
+  try {
+    const url    = gistId ? `https://api.github.com/gists/${gistId}` : 'https://api.github.com/gists';
+    const method = gistId ? 'PATCH' : 'POST';
+    const r = await fetch(url, {
+      method,
+      headers: { Authorization: 'token ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    if (!gistId) {
+      localStorage.setItem(GIST_ID_KEY, j.id);
+      const el = document.getElementById('cfg-gist-id');
+      if (el) el.value = j.id;
+    }
+    const t = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    setSyncStatus('synced', 'Gesichert ' + t);
+  } catch(e) {
+    setSyncStatus('error', 'Sync fehlgeschlagen');
+    console.error('Gist push failed', e);
+  }
+}
+
+function scheduleGistSync() {
+  if (!localStorage.getItem(GIST_TOKEN_KEY)) return;
+  if (gistTimer) clearTimeout(gistTimer);
+  gistTimer = setTimeout(pushToGist, 2000); // 2 Sek. Debounce
+}
+
+async function pullFromGist() {
+  const token  = localStorage.getItem(GIST_TOKEN_KEY);
+  const gistId = localStorage.getItem(GIST_ID_KEY);
+  if (!token || !gistId) return;
+
+  setSyncStatus('syncing', 'Lade…');
+  try {
+    const r = await fetch(`https://api.github.com/gists/${gistId}`, {
+      headers: { Authorization: 'token ' + token },
+    });
+    if (!r.ok) throw new Error(r.status);
+    const j    = await r.json();
+    const file = j.files[GIST_FILE];
+    if (!file) throw new Error('Datei nicht gefunden im Gist');
+    const remote = JSON.parse(file.content);
+    if ((remote.lastModified || 0) > (data.lastModified || 0)) {
+      data = remote;
+      localStorage.setItem(STORE_KEY, JSON.stringify(data));
+      renderAll();
+    }
+    const t = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    setSyncStatus('synced', 'Geladen ' + t);
+  } catch(e) {
+    setSyncStatus('error', 'Ladefehler');
+    console.error('Gist pull failed', e);
+  }
+}
+
+// ── Einstellungen (Gist-Token) ─────────────────
+
+function openSettingsModal() {
+  document.getElementById('cfg-token').value   = localStorage.getItem(GIST_TOKEN_KEY) || '';
+  document.getElementById('cfg-gist-id').value = localStorage.getItem(GIST_ID_KEY)    || '';
+  document.getElementById('settings-modal').classList.add('open');
+}
+
+function saveSettings() {
+  const token  = document.getElementById('cfg-token').value.trim();
+  const gistId = document.getElementById('cfg-gist-id').value.trim();
+  if (token)  localStorage.setItem(GIST_TOKEN_KEY, token);
+  else        localStorage.removeItem(GIST_TOKEN_KEY);
+  if (gistId) localStorage.setItem(GIST_ID_KEY, gistId);
+  else        localStorage.removeItem(GIST_ID_KEY);
+  closeModal('settings-modal');
+  if (token) pushToGist(); // sofort synchronisieren
+}
+
+function clearSettings() {
+  if (!confirm('Gist-Verbindung trennen? Lokale Daten bleiben erhalten.')) return;
+  localStorage.removeItem(GIST_TOKEN_KEY);
+  localStorage.removeItem(GIST_ID_KEY);
+  document.getElementById('cfg-token').value   = '';
+  document.getElementById('cfg-gist-id').value = '';
+  setSyncStatus('idle', '');
 }
 
 // ── ID generator ──────────────────────────────
@@ -576,6 +701,17 @@ function exportRosterCSV() {
 
 // ── Init ──────────────────────────────────────
 
-load();
-initTabs();
-renderAll();
+async function init() {
+  load();        // localStorage sofort laden (schnell, offline)
+  initTabs();
+  renderAll();   // App ist sofort nutzbar
+
+  // Dann aus Gist laden (überschreibt falls neuer)
+  if (localStorage.getItem(GIST_TOKEN_KEY)) {
+    await pullFromGist();
+  } else {
+    setSyncStatus('idle', '');
+  }
+}
+
+init();
