@@ -1,6 +1,6 @@
 // ──────────────────────────────────────────────
 // Brunsviga — Dienstplan & Eventplanung
-// Vanilla JS, localStorage persistence
+// Vanilla JS · localStorage + GitHub Gist Sync
 // ──────────────────────────────────────────────
 
 const STORE_KEY      = 'brunsviga_data';
@@ -12,7 +12,6 @@ const ROLES = [
   'Leitung', 'Barkeeper', 'Service', 'Kasse', 'Technik',
   'Bühne', 'Security', 'Springer', 'Extern'
 ];
-
 const EVENT_TYPES = [
   'Konzert', 'Comedy', 'Theater', 'Kabarett', 'Party',
   'Lesung', 'Workshop', 'Probe', 'Privat', 'Sonstiges'
@@ -22,13 +21,30 @@ const EVENT_TYPES = [
 
 let data = {
   lastModified: 0,
-  staff: [],       // { id, name, role, phone, notes, active }
-  events: [],      // { id, title, date, start, end, type, notes, requiredStaff[], assignedStaff[] }
-  shifts: [],      // { id, staffId, eventId|null, date, start, end, role, notes }
+  staff:  [],   // { id, name, role, phone, notes, active }
+  events: [],   // { id, title, date, start, end, type, notes, requiredStaff[], assignedStaff[] }
+  shifts: [],   // { id, staffId, eventId|null, date, start, end, role, notes }
 };
 
-let editingId = null; // used by modals
-let gistTimer  = null; // debounce handle for Gist sync
+let editingId = null;
+let gistTimer = null;
+
+// ── Security: HTML escaping (XSS prevention) ──
+
+function esc(str) {
+  return String(str == null ? '' : str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+// ── ID generator ──────────────────────────────
+
+function uid() {
+  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+}
 
 // ── Persistence ───────────────────────────────
 
@@ -41,9 +57,15 @@ function save() {
 function load() {
   const raw = localStorage.getItem(STORE_KEY);
   if (raw) {
-    try { data = JSON.parse(raw); } catch(e) { console.warn('Load failed', e); }
+    try {
+      const parsed = JSON.parse(raw);
+      if (isValidSchema(parsed)) data = parsed;
+      else console.warn('Lokale Daten haben ungültiges Format — ignoriert.');
+    } catch(e) {
+      console.error('Lokale Daten konnten nicht gelesen werden:', e);
+      setSyncStatus('error', 'Lokale Daten beschädigt');
+    }
   }
-  // Beim allerersten Start: Programm von brunsviga-kulturzentrum.de einspielen
   if (data.events.length === 0 && typeof getSeedEvents === 'function') {
     data.events = getSeedEvents();
     data.lastModified = Date.now();
@@ -51,122 +73,13 @@ function load() {
   }
 }
 
-// ── GitHub Gist Sync ───────────────────────────
+// ── Schema-Validierung (Gist + lokale Daten) ──
 
-function setSyncStatus(status, msg) {
-  const el = document.getElementById('sync-status');
-  if (!el) return;
-  const cfg = {
-    idle:    { icon: '☁', color: '#555' },
-    syncing: { icon: '↑', color: '#f39c12' },
-    synced:  { icon: '✓', color: '#2ecc71' },
-    error:   { icon: '✗', color: '#e74c3c' },
-  }[status] || { icon: '?', color: '#888' };
-  el.innerHTML = `<span style="color:${cfg.color};font-size:0.82rem">${cfg.icon} ${msg || ''}</span>`;
-}
-
-async function pushToGist() {
-  const token  = localStorage.getItem(GIST_TOKEN_KEY);
-  let   gistId = localStorage.getItem(GIST_ID_KEY);
-  if (!token) return;
-
-  setSyncStatus('syncing', 'Speichere…');
-  const payload = {
-    files: { [GIST_FILE]: { content: JSON.stringify(data, null, 2) } },
-  };
-  if (!gistId) {
-    payload.description = 'Brunsviga Dienstplan Backup';
-    payload.public = false;
-  }
-  try {
-    const url    = gistId ? `https://api.github.com/gists/${gistId}` : 'https://api.github.com/gists';
-    const method = gistId ? 'PATCH' : 'POST';
-    const r = await fetch(url, {
-      method,
-      headers: { Authorization: 'token ' + token, 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-    });
-    if (!r.ok) throw new Error(r.status);
-    const j = await r.json();
-    if (!gistId) {
-      localStorage.setItem(GIST_ID_KEY, j.id);
-      const el = document.getElementById('cfg-gist-id');
-      if (el) el.value = j.id;
-    }
-    const t = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    setSyncStatus('synced', 'Gesichert ' + t);
-  } catch(e) {
-    setSyncStatus('error', 'Sync fehlgeschlagen');
-    console.error('Gist push failed', e);
-  }
-}
-
-function scheduleGistSync() {
-  if (!localStorage.getItem(GIST_TOKEN_KEY)) return;
-  if (gistTimer) clearTimeout(gistTimer);
-  gistTimer = setTimeout(pushToGist, 2000); // 2 Sek. Debounce
-}
-
-async function pullFromGist() {
-  const token  = localStorage.getItem(GIST_TOKEN_KEY);
-  const gistId = localStorage.getItem(GIST_ID_KEY);
-  if (!token || !gistId) return;
-
-  setSyncStatus('syncing', 'Lade…');
-  try {
-    const r = await fetch(`https://api.github.com/gists/${gistId}`, {
-      headers: { Authorization: 'token ' + token },
-    });
-    if (!r.ok) throw new Error(r.status);
-    const j    = await r.json();
-    const file = j.files[GIST_FILE];
-    if (!file) throw new Error('Datei nicht gefunden im Gist');
-    const remote = JSON.parse(file.content);
-    if ((remote.lastModified || 0) > (data.lastModified || 0)) {
-      data = remote;
-      localStorage.setItem(STORE_KEY, JSON.stringify(data));
-      renderAll();
-    }
-    const t = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-    setSyncStatus('synced', 'Geladen ' + t);
-  } catch(e) {
-    setSyncStatus('error', 'Ladefehler');
-    console.error('Gist pull failed', e);
-  }
-}
-
-// ── Einstellungen (Gist-Token) ─────────────────
-
-function openSettingsModal() {
-  document.getElementById('cfg-token').value   = localStorage.getItem(GIST_TOKEN_KEY) || '';
-  document.getElementById('cfg-gist-id').value = localStorage.getItem(GIST_ID_KEY)    || '';
-  document.getElementById('settings-modal').classList.add('open');
-}
-
-function saveSettings() {
-  const token  = document.getElementById('cfg-token').value.trim();
-  const gistId = document.getElementById('cfg-gist-id').value.trim();
-  if (token)  localStorage.setItem(GIST_TOKEN_KEY, token);
-  else        localStorage.removeItem(GIST_TOKEN_KEY);
-  if (gistId) localStorage.setItem(GIST_ID_KEY, gistId);
-  else        localStorage.removeItem(GIST_ID_KEY);
-  closeModal('settings-modal');
-  if (token) pushToGist(); // sofort synchronisieren
-}
-
-function clearSettings() {
-  if (!confirm('Gist-Verbindung trennen? Lokale Daten bleiben erhalten.')) return;
-  localStorage.removeItem(GIST_TOKEN_KEY);
-  localStorage.removeItem(GIST_ID_KEY);
-  document.getElementById('cfg-token').value   = '';
-  document.getElementById('cfg-gist-id').value = '';
-  setSyncStatus('idle', '');
-}
-
-// ── ID generator ──────────────────────────────
-
-function uid() {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+function isValidSchema(obj) {
+  return obj && typeof obj === 'object'
+    && Array.isArray(obj.staff)
+    && Array.isArray(obj.events)
+    && Array.isArray(obj.shifts);
 }
 
 // ── Tab navigation ────────────────────────────
@@ -190,143 +103,108 @@ function formatDate(iso) {
   const d = new Date(iso + 'T00:00:00');
   return d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
 }
+function formatTime(t)   { return t || '—'; }
+function staffName(id)   { const s = data.staff.find(x => x.id === id);  return s ? s.name : '?'; }
+function isoToday()      { return new Date().toISOString().slice(0, 10); }
 
-function formatTime(t) { return t || '—'; }
-
-function staffName(id) {
-  const s = data.staff.find(x => x.id === id);
-  return s ? s.name : '?';
-}
-
-function eventTitle(id) {
-  const e = data.events.find(x => x.id === id);
-  return e ? e.title : '—';
-}
-
-function isoToday() {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function weekDays(startOffset = 0) {
-  const days = [];
+function weekDays() {
   const today = new Date();
-  for (let i = startOffset; i < startOffset + 7; i++) {
+  return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
-    days.push(d.toISOString().slice(0, 10));
-  }
-  return days;
+    return d.toISOString().slice(0, 10);
+  });
 }
 
 // ── DASHBOARD ─────────────────────────────────
 
 function renderDashboard() {
-  const today = isoToday();
+  const today    = isoToday();
   const upcoming = data.events
     .filter(e => e.date >= today)
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 5);
 
-  const shiftsToday = data.shifts.filter(s => s.date === today);
+  document.getElementById('stat-staff').textContent         = data.staff.filter(s => s.active !== false).length;
+  document.getElementById('stat-events').textContent        = data.events.length;
+  document.getElementById('stat-upcoming').textContent      = upcoming.length;
+  document.getElementById('stat-shifts-today').textContent  = data.shifts.filter(s => s.date === today).length;
 
-  document.getElementById('stat-staff').textContent = data.staff.filter(s => s.active !== false).length;
-  document.getElementById('stat-events').textContent = data.events.length;
-  document.getElementById('stat-upcoming').textContent = upcoming.length;
-  document.getElementById('stat-shifts-today').textContent = shiftsToday.length;
-
-  // Upcoming events list
   const ul = document.getElementById('upcoming-events');
-  ul.innerHTML = '';
   if (upcoming.length === 0) {
     ul.innerHTML = '<div class="empty-state">Keine bevorstehenden Events.</div>';
   } else {
-    upcoming.forEach(ev => {
-      const assigned = ev.assignedStaff ? ev.assignedStaff.length : 0;
-      const required = ev.requiredStaff ? ev.requiredStaff.reduce((s, r) => s + r.count, 0) : 0;
-      const statusClass = assigned >= required ? 'badge-green' : assigned > 0 ? 'badge-amber' : 'badge-red';
-      const statusText = assigned >= required ? 'Besetzt' : assigned > 0 ? 'Teilbesetzt' : 'Offen';
-      ul.innerHTML += `
-        <div class="item">
-          <div class="item-info">
-            <div class="item-title">${ev.title}</div>
-            <div class="item-meta">${formatDate(ev.date)} · ${formatTime(ev.start)}–${formatTime(ev.end)} · ${ev.type || ''}</div>
-          </div>
-          <span class="badge ${statusClass}">${statusText}</span>
-          <div class="item-actions">
-            <button class="btn btn-ghost btn-sm" onclick="openEventModal('${ev.id}')">Details</button>
-          </div>
-        </div>`;
-    });
+    ul.innerHTML = upcoming.map(ev => {
+      const assigned = (ev.assignedStaff || []).length;
+      const required = (ev.requiredStaff  || []).reduce((s, r) => s + r.count, 0);
+      const sc = assigned >= required ? 'badge-green' : assigned > 0 ? 'badge-amber' : 'badge-red';
+      const st = assigned >= required ? 'Besetzt' : assigned > 0 ? 'Teilbesetzt' : 'Offen';
+      return `<div class="item">
+        <div class="item-info">
+          <div class="item-title">${esc(ev.title)}</div>
+          <div class="item-meta">${esc(formatDate(ev.date))} · ${esc(formatTime(ev.start))}–${esc(formatTime(ev.end))} · ${esc(ev.type || '')}</div>
+        </div>
+        <span class="badge ${sc}">${st}</span>
+        <div class="item-actions">
+          <button class="btn btn-ghost btn-sm" data-id="${esc(ev.id)}" onclick="openEventModal(this.dataset.id)">Details</button>
+        </div>
+      </div>`;
+    }).join('');
   }
 
-  // Week strip
   renderWeekStrip();
 }
 
 function renderWeekStrip() {
-  const strip = document.getElementById('week-strip');
-  strip.innerHTML = '';
   const today = isoToday();
-  weekDays().forEach(iso => {
+  document.getElementById('week-strip').innerHTML = weekDays().map(iso => {
     const dayEvents = data.events.filter(e => e.date === iso);
-    const isToday = iso === today;
     const d = new Date(iso + 'T00:00:00');
-    const dayName = d.toLocaleDateString('de-DE', { weekday: 'short' });
-    const dayNum = d.getDate();
-    let evHTML = '';
-    dayEvents.forEach(ev => {
-      evHTML += `<div class="day-event" title="${ev.title}" onclick="openEventModal('${ev.id}')">${ev.title}</div>`;
-    });
-    strip.innerHTML += `
-      <div class="day-col ${isToday ? 'today' : ''}">
-        <div class="day-header">${dayName}</div>
-        <div class="day-date">${dayNum}</div>
-        ${evHTML || '<div style="font-size:0.7rem;color:var(--text-muted);text-align:center">—</div>'}
-      </div>`;
-  });
+    const evHTML = dayEvents.map(ev =>
+      `<div class="day-event" title="${esc(ev.title)}" data-id="${esc(ev.id)}" onclick="openEventModal(this.dataset.id)">${esc(ev.title)}</div>`
+    ).join('') || '<div style="font-size:0.7rem;color:var(--text-muted);text-align:center">—</div>';
+    return `<div class="day-col ${iso === today ? 'today' : ''}">
+      <div class="day-header">${d.toLocaleDateString('de-DE', { weekday: 'short' })}</div>
+      <div class="day-date">${d.getDate()}</div>
+      ${evHTML}
+    </div>`;
+  }).join('');
 }
 
-// ── PERSONAL (Staff) ──────────────────────────
+// ── PERSONAL ──────────────────────────────────
 
 function renderStaff() {
-  const list = document.getElementById('staff-list');
-  list.innerHTML = '';
+  const list   = document.getElementById('staff-list');
   const active = data.staff.filter(s => s.active !== false);
   const inactive = data.staff.filter(s => s.active === false);
-
   if (data.staff.length === 0) {
     list.innerHTML = '<div class="empty-state">Noch kein Personal angelegt.</div>';
     return;
   }
-
-  [...active, ...inactive].forEach(s => {
-    const isInactive = s.active === false;
-    list.innerHTML += `
-      <div class="item" style="${isInactive ? 'opacity:0.5' : ''}">
-        <div class="item-info">
-          <div class="item-title">${s.name} ${isInactive ? '<span class="badge badge-gray">Inaktiv</span>' : ''}</div>
-          <div class="item-meta">${s.role || '—'} ${s.phone ? '· ' + s.phone : ''}</div>
-          ${s.notes ? `<div class="item-meta">${s.notes}</div>` : ''}
-        </div>
-        <div class="item-actions">
-          <button class="btn btn-ghost btn-sm" onclick="openStaffModal('${s.id}')">Bearbeiten</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteStaff('${s.id}')">✕</button>
-        </div>
-      </div>`;
-  });
+  list.innerHTML = [...active, ...inactive].map(s => {
+    const off = s.active === false;
+    return `<div class="item" style="${off ? 'opacity:0.5' : ''}">
+      <div class="item-info">
+        <div class="item-title">${esc(s.name)} ${off ? '<span class="badge badge-gray">Inaktiv</span>' : ''}</div>
+        <div class="item-meta">${esc(s.role || '—')}${s.phone ? ' · ' + esc(s.phone) : ''}</div>
+        ${s.notes ? `<div class="item-meta">${esc(s.notes)}</div>` : ''}
+      </div>
+      <div class="item-actions">
+        <button class="btn btn-ghost btn-sm" data-id="${esc(s.id)}" onclick="openStaffModal(this.dataset.id)">Bearbeiten</button>
+        <button class="btn btn-danger btn-sm" data-id="${esc(s.id)}" onclick="deleteStaff(this.dataset.id)">✕</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function openStaffModal(id) {
   editingId = id || null;
   const s = id ? data.staff.find(x => x.id === id) : null;
   document.getElementById('staff-modal-title').textContent = s ? 'Personal bearbeiten' : 'Neues Personal';
-  document.getElementById('sf-name').value = s ? s.name : '';
-  document.getElementById('sf-phone').value = s ? (s.phone || '') : '';
-  document.getElementById('sf-notes').value = s ? (s.notes || '') : '';
-
-  const roleEl = document.getElementById('sf-role');
-  roleEl.innerHTML = ROLES.map(r => `<option value="${r}" ${s && s.role === r ? 'selected' : ''}>${r}</option>`).join('');
-
+  document.getElementById('sf-name').value   = s ? s.name        : '';
+  document.getElementById('sf-phone').value  = s ? (s.phone || '') : '';
+  document.getElementById('sf-notes').value  = s ? (s.notes || '') : '';
+  document.getElementById('sf-role').value   = s ? (s.role  || ROLES[0]) : ROLES[0];
   document.getElementById('sf-active').checked = s ? (s.active !== false) : true;
   document.getElementById('staff-modal').classList.add('open');
 }
@@ -334,323 +212,263 @@ function openStaffModal(id) {
 function saveStaffModal() {
   const name = document.getElementById('sf-name').value.trim();
   if (!name) { alert('Name ist erforderlich.'); return; }
-
+  const entry = {
+    name,
+    role:   document.getElementById('sf-role').value,
+    phone:  document.getElementById('sf-phone').value.trim(),
+    notes:  document.getElementById('sf-notes').value.trim(),
+    active: document.getElementById('sf-active').checked,
+  };
   if (editingId) {
     const idx = data.staff.findIndex(x => x.id === editingId);
-    data.staff[idx] = {
-      ...data.staff[idx],
-      name,
-      role: document.getElementById('sf-role').value,
-      phone: document.getElementById('sf-phone').value.trim(),
-      notes: document.getElementById('sf-notes').value.trim(),
-      active: document.getElementById('sf-active').checked,
-    };
+    data.staff[idx] = { ...data.staff[idx], ...entry };
   } else {
-    data.staff.push({
-      id: uid(), name,
-      role: document.getElementById('sf-role').value,
-      phone: document.getElementById('sf-phone').value.trim(),
-      notes: document.getElementById('sf-notes').value.trim(),
-      active: true,
-    });
+    data.staff.push({ id: uid(), ...entry });
   }
-  save();
-  closeModal('staff-modal');
-  renderAll();
+  save(); closeModal('staff-modal'); renderAll();
 }
 
 function deleteStaff(id) {
   if (!confirm('Person wirklich löschen?')) return;
-  data.staff = data.staff.filter(s => s.id !== id);
+  data.staff  = data.staff.filter(s => s.id !== id);
   data.shifts = data.shifts.filter(s => s.staffId !== id);
   data.events.forEach(ev => {
     ev.assignedStaff = (ev.assignedStaff || []).filter(sid => sid !== id);
   });
-  save();
-  renderAll();
+  save(); renderAll();
 }
 
 // ── EVENTS ────────────────────────────────────
 
 function renderEvents() {
-  const list = document.getElementById('events-list');
-  const today = isoToday();
+  const list   = document.getElementById('events-list');
+  const today  = isoToday();
   const filter = document.getElementById('events-filter').value;
   let evs = [...data.events].sort((a, b) => a.date.localeCompare(b.date));
-
   if (filter === 'upcoming') evs = evs.filter(e => e.date >= today);
   else if (filter === 'past') evs = evs.filter(e => e.date < today);
 
-  list.innerHTML = '';
   if (evs.length === 0) {
     list.innerHTML = '<div class="empty-state">Keine Events vorhanden.</div>';
     return;
   }
-
-  evs.forEach(ev => {
+  list.innerHTML = evs.map(ev => {
     const assigned = (ev.assignedStaff || []).length;
-    const required = (ev.requiredStaff || []).reduce((s, r) => s + r.count, 0);
-    const statusClass = assigned >= required ? 'badge-green' : assigned > 0 ? 'badge-amber' : 'badge-red';
-    const statusText = assigned >= required ? 'Besetzt' : assigned > 0 ? `${assigned}/${required}` : `0/${required}`;
-
-    list.innerHTML += `
-      <div class="item">
-        <div class="item-info">
-          <div class="item-title">${ev.title}</div>
-          <div class="item-meta">${formatDate(ev.date)} · ${formatTime(ev.start)}–${formatTime(ev.end)} · <span class="badge badge-blue">${ev.type || 'Sonstiges'}</span></div>
-          ${ev.notes ? `<div class="item-meta">${ev.notes}</div>` : ''}
-        </div>
-        <span class="badge ${statusClass}">${statusText} Personal</span>
-        <div class="item-actions">
-          <button class="btn btn-secondary btn-sm" onclick="openAssignModal('${ev.id}')">Besetzung</button>
-          <button class="btn btn-ghost btn-sm" onclick="openEventModal('${ev.id}')">Bearbeiten</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteEvent('${ev.id}')">✕</button>
-        </div>
-      </div>`;
-  });
+    const required = (ev.requiredStaff  || []).reduce((s, r) => s + r.count, 0);
+    const sc = assigned >= required ? 'badge-green' : assigned > 0 ? 'badge-amber' : 'badge-red';
+    const st = assigned >= required ? 'Besetzt' : `${assigned}/${required}`;
+    return `<div class="item">
+      <div class="item-info">
+        <div class="item-title">${esc(ev.title)}</div>
+        <div class="item-meta">${esc(formatDate(ev.date))} · ${esc(formatTime(ev.start))}–${esc(formatTime(ev.end))} · <span class="badge badge-blue">${esc(ev.type || 'Sonstiges')}</span></div>
+        ${ev.notes ? `<div class="item-meta">${esc(ev.notes)}</div>` : ''}
+      </div>
+      <span class="badge ${sc}">${st} Personal</span>
+      <div class="item-actions">
+        <button class="btn btn-secondary btn-sm" data-id="${esc(ev.id)}" onclick="openAssignModal(this.dataset.id)">Besetzung</button>
+        <button class="btn btn-ghost btn-sm"     data-id="${esc(ev.id)}" onclick="openEventModal(this.dataset.id)">Bearbeiten</button>
+        <button class="btn btn-danger btn-sm"    data-id="${esc(ev.id)}" onclick="deleteEvent(this.dataset.id)">✕</button>
+      </div>
+    </div>`;
+  }).join('');
 }
 
 function openEventModal(id) {
   editingId = id || null;
   const ev = id ? data.events.find(x => x.id === id) : null;
   document.getElementById('event-modal-title').textContent = ev ? 'Event bearbeiten' : 'Neues Event';
-  document.getElementById('ef-title').value = ev ? ev.title : '';
-  document.getElementById('ef-date').value = ev ? ev.date : isoToday();
+  document.getElementById('ef-title').value = ev ? ev.title        : '';
+  document.getElementById('ef-date').value  = ev ? ev.date         : isoToday();
   document.getElementById('ef-start').value = ev ? (ev.start || '') : '20:00';
-  document.getElementById('ef-end').value = ev ? (ev.end || '') : '23:00';
+  document.getElementById('ef-end').value   = ev ? (ev.end   || '') : '23:00';
   document.getElementById('ef-notes').value = ev ? (ev.notes || '') : '';
-
-  const typeEl = document.getElementById('ef-type');
-  typeEl.innerHTML = EVENT_TYPES.map(t => `<option value="${t}" ${ev && ev.type === t ? 'selected' : ''}>${t}</option>`).join('');
-
-  // Required staff rows
+  document.getElementById('ef-type').value  = ev ? (ev.type  || EVENT_TYPES[0]) : EVENT_TYPES[0];
   renderRequiredStaffRows(ev ? (ev.requiredStaff || []) : []);
   document.getElementById('event-modal').classList.add('open');
 }
 
 function renderRequiredStaffRows(rows) {
-  const container = document.getElementById('required-staff-rows');
-  container.innerHTML = '';
-  rows.forEach((r, i) => {
-    container.innerHTML += buildRequiredStaffRow(r.role, r.count, i);
-  });
+  document.getElementById('required-staff-rows').innerHTML = rows.map((r, i) =>
+    buildRequiredStaffRow(r.role, r.count, i)
+  ).join('');
 }
 
 function buildRequiredStaffRow(role = '', count = 1, i = Date.now()) {
-  return `
-    <div class="form-row required-staff-row" data-idx="${i}">
-      <div class="form-group" style="flex:2">
-        <select class="rs-role">
-          ${ROLES.map(r => `<option value="${r}" ${r === role ? 'selected' : ''}>${r}</option>`).join('')}
-        </select>
-      </div>
-      <div class="form-group" style="flex:1">
-        <input type="number" class="rs-count" min="1" max="20" value="${count}" />
-      </div>
-      <button class="btn btn-ghost btn-sm" style="align-self:flex-end;margin-bottom:12px"
-        onclick="this.closest('.required-staff-row').remove()">✕</button>
-    </div>`;
+  const opts = ROLES.map(r => `<option value="${esc(r)}" ${r === role ? 'selected' : ''}>${esc(r)}</option>`).join('');
+  return `<div class="form-row required-staff-row" data-idx="${i}">
+    <div class="form-group" style="flex:2"><select class="rs-role">${opts}</select></div>
+    <div class="form-group" style="flex:1"><input type="number" class="rs-count" min="1" max="20" value="${esc(count)}" /></div>
+    <button class="btn btn-ghost btn-sm" style="align-self:flex-end;margin-bottom:12px"
+      onclick="this.closest('.required-staff-row').remove()">✕</button>
+  </div>`;
 }
 
 function addRequiredStaffRow() {
-  const container = document.getElementById('required-staff-rows');
   const div = document.createElement('div');
   div.innerHTML = buildRequiredStaffRow();
-  container.appendChild(div.firstElementChild);
+  document.getElementById('required-staff-rows').appendChild(div.firstElementChild);
 }
 
 function saveEventModal() {
   const title = document.getElementById('ef-title').value.trim();
   if (!title) { alert('Titel ist erforderlich.'); return; }
-
   const rows = [...document.querySelectorAll('.required-staff-row')].map(row => ({
-    role: row.querySelector('.rs-role').value,
+    role:  row.querySelector('.rs-role').value,
     count: parseInt(row.querySelector('.rs-count').value) || 1,
   }));
-
   const evData = {
     title,
-    date: document.getElementById('ef-date').value,
-    start: document.getElementById('ef-start').value,
-    end: document.getElementById('ef-end').value,
-    type: document.getElementById('ef-type').value,
-    notes: document.getElementById('ef-notes').value.trim(),
+    date:          document.getElementById('ef-date').value,
+    start:         document.getElementById('ef-start').value,
+    end:           document.getElementById('ef-end').value,
+    type:          document.getElementById('ef-type').value,
+    notes:         document.getElementById('ef-notes').value.trim(),
     requiredStaff: rows,
   };
-
   if (editingId) {
     const idx = data.events.findIndex(x => x.id === editingId);
     data.events[idx] = { ...data.events[idx], ...evData };
   } else {
     data.events.push({ id: uid(), ...evData, assignedStaff: [] });
   }
-  save();
-  closeModal('event-modal');
-  renderAll();
+  save(); closeModal('event-modal'); renderAll();
 }
 
 function deleteEvent(id) {
   if (!confirm('Event wirklich löschen?')) return;
   data.events = data.events.filter(e => e.id !== id);
   data.shifts = data.shifts.filter(s => s.eventId !== id);
-  save();
-  renderAll();
+  save(); renderAll();
 }
 
-// ── ASSIGN STAFF to EVENT ─────────────────────
+// ── BESETZUNG ─────────────────────────────────
 
 function openAssignModal(eventId) {
   const ev = data.events.find(x => x.id === eventId);
   if (!ev) return;
   editingId = eventId;
-  document.getElementById('assign-event-name').textContent = `${ev.title} — ${formatDate(ev.date)}`;
+  document.getElementById('assign-event-name').textContent =
+    `${ev.title} — ${formatDate(ev.date)}`;
 
-  const container = document.getElementById('assign-staff-list');
-  container.innerHTML = '';
+  const req = ev.requiredStaff || [];
+  const summary = document.getElementById('assign-required-summary');
+  if (req.length > 0) {
+    summary.textContent = 'Benötigt: ' + req.map(r => `${r.count}× ${r.role}`).join(', ');
+  } else {
+    summary.textContent = '';
+  }
+
   const activeStaff = data.staff.filter(s => s.active !== false);
-
+  const container   = document.getElementById('assign-staff-list');
   if (activeStaff.length === 0) {
     container.innerHTML = '<div class="empty-state">Noch kein aktives Personal angelegt.</div>';
   } else {
-    activeStaff.forEach(s => {
-      const isAssigned = (ev.assignedStaff || []).includes(s.id);
-      container.innerHTML += `
-        <div class="item">
-          <input type="checkbox" id="asgn-${s.id}" value="${s.id}"
-            ${isAssigned ? 'checked' : ''} style="width:auto;margin-right:8px">
-          <label for="asgn-${s.id}" class="item-info" style="cursor:pointer">
-            <div class="item-title">${s.name}</div>
-            <div class="item-meta">${s.role || '—'}</div>
-          </label>
-        </div>`;
-    });
+    container.innerHTML = activeStaff.map(s => {
+      const checked = (ev.assignedStaff || []).includes(s.id);
+      return `<div class="item">
+        <input type="checkbox" id="asgn-${esc(s.id)}" value="${esc(s.id)}"
+          ${checked ? 'checked' : ''} style="width:auto;margin-right:8px">
+        <label for="asgn-${esc(s.id)}" class="item-info" style="cursor:pointer">
+          <div class="item-title">${esc(s.name)}</div>
+          <div class="item-meta">${esc(s.role || '—')}</div>
+        </label>
+      </div>`;
+    }).join('');
   }
-
-  // Show required staff summary
-  const req = (ev.requiredStaff || []);
-  let reqHTML = '';
-  if (req.length > 0) {
-    reqHTML = '<div class="item-meta mt8">Benötigt: ' +
-      req.map(r => `${r.count}× ${r.role}`).join(', ') + '</div>';
-  }
-  document.getElementById('assign-required-summary').innerHTML = reqHTML;
-
   document.getElementById('assign-modal').classList.add('open');
 }
 
 function saveAssignModal() {
   const ev = data.events.find(x => x.id === editingId);
   if (!ev) return;
-  const checked = [...document.querySelectorAll('#assign-staff-list input[type=checkbox]:checked')]
+  ev.assignedStaff = [...document.querySelectorAll('#assign-staff-list input[type=checkbox]:checked')]
     .map(cb => cb.value);
-  ev.assignedStaff = checked;
-  save();
-  closeModal('assign-modal');
-  renderAll();
+  save(); closeModal('assign-modal'); renderAll();
 }
 
-// ── DIENSTPLAN (Shifts) ───────────────────────
+// ── DIENSTPLAN ────────────────────────────────
 
 function renderRoster() {
   const filter = document.getElementById('roster-date').value || isoToday();
   const shifts = data.shifts
     .filter(s => s.date === filter)
     .sort((a, b) => (a.start || '').localeCompare(b.start || ''));
-
   const tbody = document.getElementById('roster-tbody');
-  tbody.innerHTML = '';
-
   if (shifts.length === 0) {
     tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Keine Schichten für diesen Tag.</td></tr>`;
     return;
   }
-
-  shifts.forEach(s => {
+  tbody.innerHTML = shifts.map(s => {
     const ev = s.eventId ? data.events.find(x => x.id === s.eventId) : null;
-    tbody.innerHTML += `
-      <tr>
-        <td><strong>${staffName(s.staffId)}</strong></td>
-        <td><span class="badge badge-blue">${s.role || '—'}</span></td>
-        <td>${formatTime(s.start)} – ${formatTime(s.end)}</td>
-        <td>${ev ? ev.title : '—'}</td>
-        <td>${s.notes || ''}</td>
-        <td>
-          <button class="btn btn-ghost btn-sm" onclick="openShiftModal('${s.id}')">✏</button>
-          <button class="btn btn-danger btn-sm" onclick="deleteShift('${s.id}')">✕</button>
-        </td>
-      </tr>`;
-  });
+    return `<tr>
+      <td><strong>${esc(staffName(s.staffId))}</strong></td>
+      <td><span class="badge badge-blue">${esc(s.role || '—')}</span></td>
+      <td>${esc(formatTime(s.start))} – ${esc(formatTime(s.end))}</td>
+      <td>${ev ? esc(ev.title) : '—'}</td>
+      <td>${esc(s.notes || '')}</td>
+      <td>
+        <button class="btn btn-ghost btn-sm" data-id="${esc(s.id)}" onclick="openShiftModal(this.dataset.id)">✏</button>
+        <button class="btn btn-danger btn-sm" data-id="${esc(s.id)}" onclick="deleteShift(this.dataset.id)">✕</button>
+      </td>
+    </tr>`;
+  }).join('');
 }
 
 function openShiftModal(id) {
   editingId = id || null;
   const s = id ? data.shifts.find(x => x.id === id) : null;
   document.getElementById('shift-modal-title').textContent = s ? 'Schicht bearbeiten' : 'Neue Schicht';
-  document.getElementById('shf-date').value = s ? s.date : (document.getElementById('roster-date').value || isoToday());
+  document.getElementById('shf-date').value  = s ? s.date         : (document.getElementById('roster-date').value || isoToday());
   document.getElementById('shf-start').value = s ? (s.start || '') : '18:00';
-  document.getElementById('shf-end').value = s ? (s.end || '') : '23:00';
+  document.getElementById('shf-end').value   = s ? (s.end   || '') : '23:00';
   document.getElementById('shf-notes').value = s ? (s.notes || '') : '';
+  document.getElementById('shf-role').value  = s ? (s.role  || ROLES[0]) : ROLES[0];
 
-  const staffEl = document.getElementById('shf-staff');
   const activeStaff = data.staff.filter(x => x.active !== false);
-  staffEl.innerHTML = '<option value="">— Personal wählen —</option>' +
-    activeStaff.map(p => `<option value="${p.id}" ${s && s.staffId === p.id ? 'selected' : ''}>${p.name} (${p.role || '—'})</option>`).join('');
+  document.getElementById('shf-staff').innerHTML =
+    '<option value="">— Personal wählen —</option>' +
+    activeStaff.map(p =>
+      `<option value="${esc(p.id)}" ${s && s.staffId === p.id ? 'selected' : ''}>${esc(p.name)} (${esc(p.role || '—')})</option>`
+    ).join('');
 
-  const roleEl = document.getElementById('shf-role');
-  roleEl.innerHTML = ROLES.map(r => `<option value="${r}" ${s && s.role === r ? 'selected' : ''}>${r}</option>`).join('');
-
-  const evEl = document.getElementById('shf-event');
-  const dateVal = document.getElementById('shf-date').value;
-  const dayEvents = data.events.filter(e => e.date === dateVal);
-  evEl.innerHTML = '<option value="">— Kein Event —</option>' +
-    dayEvents.map(e => `<option value="${e.id}" ${s && s.eventId === e.id ? 'selected' : ''}>${e.title}</option>`).join('');
-
+  updateShiftEventDropdown(document.getElementById('shf-date').value, s ? s.eventId : null);
   document.getElementById('shift-modal').classList.add('open');
 }
 
-// Update event dropdown when date changes in shift modal
-document.addEventListener('DOMContentLoaded', () => {
-  const dateInput = document.getElementById('shf-date');
-  if (dateInput) {
-    dateInput.addEventListener('change', () => {
-      const evEl = document.getElementById('shf-event');
-      const dayEvents = data.events.filter(e => e.date === dateInput.value);
-      evEl.innerHTML = '<option value="">— Kein Event —</option>' +
-        dayEvents.map(e => `<option value="${e.id}">${e.title}</option>`).join('');
-    });
-  }
-});
+function updateShiftEventDropdown(dateVal, selectedEventId) {
+  const dayEvents = data.events.filter(e => e.date === dateVal);
+  document.getElementById('shf-event').innerHTML =
+    '<option value="">— Kein Event —</option>' +
+    dayEvents.map(e =>
+      `<option value="${esc(e.id)}" ${e.id === selectedEventId ? 'selected' : ''}>${esc(e.title)}</option>`
+    ).join('');
+}
 
 function saveShiftModal() {
   const staffId = document.getElementById('shf-staff').value;
   if (!staffId) { alert('Bitte Personal wählen.'); return; }
-
   const shiftData = {
     staffId,
-    date: document.getElementById('shf-date').value,
-    start: document.getElementById('shf-start').value,
-    end: document.getElementById('shf-end').value,
-    role: document.getElementById('shf-role').value,
+    date:    document.getElementById('shf-date').value,
+    start:   document.getElementById('shf-start').value,
+    end:     document.getElementById('shf-end').value,
+    role:    document.getElementById('shf-role').value,
     eventId: document.getElementById('shf-event').value || null,
-    notes: document.getElementById('shf-notes').value.trim(),
+    notes:   document.getElementById('shf-notes').value.trim(),
   };
-
   if (editingId) {
     const idx = data.shifts.findIndex(x => x.id === editingId);
     data.shifts[idx] = { ...data.shifts[idx], ...shiftData };
   } else {
     data.shifts.push({ id: uid(), ...shiftData });
   }
-  save();
-  closeModal('shift-modal');
-  renderRoster();
+  save(); closeModal('shift-modal'); renderRoster();
 }
 
 function deleteShift(id) {
   if (!confirm('Schicht löschen?')) return;
   data.shifts = data.shifts.filter(s => s.id !== id);
-  save();
-  renderRoster();
+  save(); renderRoster();
 }
 
 // ── Modal helpers ─────────────────────────────
@@ -660,11 +478,19 @@ function closeModal(id) {
   editingId = null;
 }
 
-// Close on overlay click
 document.addEventListener('click', e => {
   if (e.target.classList.contains('modal-overlay')) {
     e.target.classList.remove('open');
     editingId = null;
+  }
+});
+
+document.addEventListener('DOMContentLoaded', () => {
+  const dateInput = document.getElementById('shf-date');
+  if (dateInput) {
+    dateInput.addEventListener('change', () =>
+      updateShiftEventDropdown(dateInput.value, null)
+    );
   }
 });
 
@@ -677,7 +503,14 @@ function renderAll() {
   renderRoster();
 }
 
-// ── Export (simple CSV) ───────────────────────
+// ── CSV Export ────────────────────────────────
+
+function escCSV(val) {
+  const str = String(val == null ? '' : val);
+  // Prevent formula injection in Excel/Calc
+  const safe = str.match(/^[=+@\-]/) ? "'" + str : str;
+  return '"' + safe.replace(/"/g, '""') + '"';
+}
 
 function exportRosterCSV() {
   const rows = [['Datum', 'Name', 'Rolle', 'Von', 'Bis', 'Event', 'Notiz']];
@@ -685,28 +518,365 @@ function exportRosterCSV() {
     .sort((a, b) => a.date.localeCompare(b.date) || (a.start || '').localeCompare(b.start || ''))
     .forEach(s => {
       const ev = s.eventId ? data.events.find(x => x.id === s.eventId) : null;
-      rows.push([
-        s.date, staffName(s.staffId), s.role || '',
-        s.start || '', s.end || '',
-        ev ? ev.title : '', s.notes || '',
-      ]);
+      rows.push([s.date, staffName(s.staffId), s.role || '', s.start || '', s.end || '',
+        ev ? ev.title : '', s.notes || '']);
     });
-  const csv = rows.map(r => r.map(c => `"${c}"`).join(';')).join('\n');
-  const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8' });
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = `brunsviga-dienstplan-${isoToday()}.csv`;
+  downloadBlob(
+    '\uFEFF' + rows.map(r => r.map(escCSV).join(';')).join('\n'),
+    `brunsviga-dienstplan-${isoToday()}.csv`,
+    'text/csv;charset=utf-8'
+  );
+}
+
+function downloadBlob(content, filename, type) {
+  const a = Object.assign(document.createElement('a'), {
+    href:     URL.createObjectURL(new Blob([content], { type })),
+    download: filename,
+  });
   a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ── JSON Vollbackup ───────────────────────────
+
+function downloadJSONBackup() {
+  downloadBlob(
+    JSON.stringify(data, null, 2),
+    `brunsviga-backup-${isoToday()}.json`,
+    'application/json'
+  );
+}
+
+function restoreFromJSON() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  input.onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = evt => {
+      try {
+        const imported = JSON.parse(evt.target.result);
+        if (!isValidSchema(imported)) { alert('Ungültige Backup-Datei.'); return; }
+        if (!confirm(`Backup vom ${new Date(imported.lastModified || 0).toLocaleString('de-DE')} laden?\n\nAktuelle Daten werden überschrieben.`)) return;
+        data = imported;
+        save();
+        renderAll();
+        alert('✓ Backup erfolgreich geladen.');
+      } catch(err) {
+        alert('Fehler beim Lesen der Backup-Datei: ' + err.message);
+      }
+    };
+    reader.readAsText(file);
+  };
+  input.click();
+}
+
+// ── CSV Import (Personal / Events) ───────────
+
+function parseCSV(text) {
+  return text.trim().split('\n').map(line =>
+    line.split(';').map(cell => cell.trim().replace(/^"|"$/g, '').replace(/""/g, '"'))
+  );
+}
+
+function importStaffCSV() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv,.txt';
+  input.onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = evt => {
+      try {
+        const rows = parseCSV(evt.target.result);
+        const header = rows[0].map(h => h.toLowerCase().trim());
+        const iName  = header.indexOf('name');
+        if (iName === -1) { alert('Spalte "Name" nicht gefunden.'); return; }
+        const iRole  = header.indexOf('rolle');
+        const iPhone = header.indexOf('telefon');
+        const iNotes = header.indexOf('notizen');
+        const iActive = header.indexOf('aktiv');
+        let added = 0, updated = 0;
+        rows.slice(1).forEach(row => {
+          if (!row[iName] || !row[iName].trim()) return;
+          const name = row[iName].trim();
+          const entry = {
+            name,
+            role:   iRole   >= 0 ? (row[iRole]   || '').trim() : '',
+            phone:  iPhone  >= 0 ? (row[iPhone]  || '').trim() : '',
+            notes:  iNotes  >= 0 ? (row[iNotes]  || '').trim() : '',
+            active: iActive >= 0 ? row[iActive].trim().toLowerCase() !== 'nein' : true,
+          };
+          const existing = data.staff.find(s => s.name.toLowerCase() === name.toLowerCase());
+          if (existing) { Object.assign(existing, entry); updated++; }
+          else           { data.staff.push({ id: uid(), ...entry }); added++; }
+        });
+        save(); renderAll(); closeModal('settings-modal');
+        alert(`✓ Personal importiert: ${added} neu, ${updated} aktualisiert.`);
+      } catch(err) { alert('Fehler beim Import: ' + err.message); }
+    };
+    reader.readAsText(file, 'utf-8');
+  };
+  input.click();
+}
+
+function importEventsCSV() {
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.csv,.txt';
+  input.onchange = e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = evt => {
+      try {
+        const rows = parseCSV(evt.target.result);
+        const header = rows[0].map(h => h.toLowerCase().trim());
+        const iTitle = header.indexOf('titel');
+        if (iTitle === -1) { alert('Spalte "Titel" nicht gefunden.'); return; }
+        const iDate  = header.indexOf('datum');
+        const iStart = header.indexOf('beginn');
+        const iEnd   = header.indexOf('ende');
+        const iType  = header.indexOf('typ');
+        const iNotes = header.indexOf('notizen');
+        let added = 0, skipped = 0;
+        rows.slice(1).forEach(row => {
+          const title = (row[iTitle] || '').trim();
+          const date  = (iDate  >= 0 ? row[iDate]  : '').trim();
+          if (!title || !date) { skipped++; return; }
+          const existing = data.events.find(e => e.title === title && e.date === date);
+          if (existing) { skipped++; return; }
+          data.events.push({
+            id: uid(), title, date,
+            start:          iStart >= 0 ? (row[iStart] || '').trim() : '',
+            end:            iEnd   >= 0 ? (row[iEnd]   || '').trim() : '',
+            type:           iType  >= 0 ? (row[iType]  || '').trim() : 'Sonstiges',
+            notes:          iNotes >= 0 ? (row[iNotes] || '').trim() : '',
+            requiredStaff:  [],
+            assignedStaff:  [],
+          });
+          added++;
+        });
+        save(); renderAll(); closeModal('settings-modal');
+        alert(`✓ Events importiert: ${added} neu, ${skipped} übersprungen (doppelt oder kein Datum).`);
+      } catch(err) { alert('Fehler beim Import: ' + err.message); }
+    };
+    reader.readAsText(file, 'utf-8');
+  };
+  input.click();
+}
+
+function downloadStaffTemplate() {
+  downloadBlob(
+    'Name;Rolle;Telefon;Notizen;Aktiv\nMax Mustermann;Service;+49 170 1234567;Nur freitags;Ja\n',
+    'brunsviga-personal-vorlage.csv', 'text/csv;charset=utf-8'
+  );
+}
+
+function downloadEventsTemplate() {
+  downloadBlob(
+    'Titel;Datum;Beginn;Ende;Typ;Notizen\nAbendveranstaltung;2026-04-01;20:00;23:00;Comedy;Zusatzinfos hier\n',
+    'brunsviga-events-vorlage.csv', 'text/csv;charset=utf-8'
+  );
+}
+
+// ── GitHub Gist Sync ───────────────────────────
+
+function setSyncStatus(status, msg) {
+  const el = document.getElementById('sync-status');
+  if (!el) return;
+  const cfg = {
+    idle:    { icon: '☁', color: '#555' },
+    syncing: { icon: '↑', color: '#f39c12' },
+    synced:  { icon: '✓', color: '#2ecc71' },
+    error:   { icon: '✗', color: '#e74c3c' },
+  }[status] || { icon: '?', color: '#888' };
+  el.textContent = '';
+  const span = document.createElement('span');
+  span.style.cssText = `color:${cfg.color};font-size:0.82rem`;
+  span.textContent   = `${cfg.icon} ${msg || ''}`;
+  el.appendChild(span);
+}
+
+async function pushToGist() {
+  const token  = localStorage.getItem(GIST_TOKEN_KEY);
+  let   gistId = localStorage.getItem(GIST_ID_KEY);
+  if (!token) return;
+  setSyncStatus('syncing', 'Speichere…');
+  const payload = { files: { [GIST_FILE]: { content: JSON.stringify(data, null, 2) } } };
+  if (!gistId) { payload.description = 'Brunsviga Dienstplan Backup'; payload.public = false; }
+  try {
+    const r = await fetch(
+      gistId ? `https://api.github.com/gists/${gistId}` : 'https://api.github.com/gists',
+      { method: gistId ? 'PATCH' : 'POST',
+        headers: { Authorization: 'token ' + token, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload) }
+    );
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (!gistId) {
+      localStorage.setItem(GIST_ID_KEY, j.id);
+      const el = document.getElementById('cfg-gist-id');
+      if (el) el.value = j.id;
+    }
+    const t = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    setSyncStatus('synced', 'Gesichert ' + t);
+  } catch(e) {
+    setSyncStatus('error', 'Sync fehlgeschlagen');
+    console.error('Gist push failed', e);
+  }
+}
+
+function scheduleGistSync() {
+  if (!localStorage.getItem(GIST_TOKEN_KEY)) return;
+  if (gistTimer) clearTimeout(gistTimer);
+  gistTimer = setTimeout(pushToGist, 2000);
+}
+
+async function pullFromGist() {
+  const token  = localStorage.getItem(GIST_TOKEN_KEY);
+  const gistId = localStorage.getItem(GIST_ID_KEY);
+  if (!token || !gistId) return;
+  setSyncStatus('syncing', 'Lade…');
+  try {
+    const r = await fetch(`https://api.github.com/gists/${gistId}`,
+      { headers: { Authorization: 'token ' + token } }
+    );
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j    = await r.json();
+    const file = j.files[GIST_FILE];
+    if (!file) throw new Error('Datei nicht gefunden');
+    const remote = JSON.parse(file.content);
+    if (!isValidSchema(remote)) throw new Error('Ungültiges Datenformat im Gist');
+    if ((remote.lastModified || 0) > (data.lastModified || 0)) {
+      data = remote;
+      localStorage.setItem(STORE_KEY, JSON.stringify(data));
+      renderAll();
+    }
+    const t = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    setSyncStatus('synced', 'Geladen ' + t);
+  } catch(e) {
+    setSyncStatus('error', 'Ladefehler');
+    console.error('Gist pull failed', e);
+  }
+}
+
+// ── Versionshistorie ──────────────────────────
+
+async function loadVersionHistory() {
+  const token  = localStorage.getItem(GIST_TOKEN_KEY);
+  const gistId = localStorage.getItem(GIST_ID_KEY);
+  const el     = document.getElementById('version-list');
+  if (!token || !gistId) {
+    el.innerHTML = '<div style="color:#888;font-size:0.85rem">Cloud-Backup muss zuerst eingerichtet sein.</div>';
+    return;
+  }
+  el.innerHTML = '<div style="color:#888;font-size:0.85rem">Lade Versionen…</div>';
+  try {
+    const r = await fetch(`https://api.github.com/gists/${gistId}`,
+      { headers: { Authorization: 'token ' + token } }
+    );
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    const history = (j.history || []).slice(0, 20);
+    if (history.length === 0) {
+      el.innerHTML = '<div style="color:#888;font-size:0.85rem">Noch keine Versionen vorhanden.</div>';
+      return;
+    }
+    el.innerHTML = history.map((v, i) => {
+      const ts = new Date(v.committed_at).toLocaleString('de-DE');
+      const added   = v.change_status ? v.change_status.additions : '';
+      const deleted = v.change_status ? v.change_status.deletions : '';
+      const label   = i === 0 ? ' <span style="color:var(--green);font-size:0.75rem">(aktuell)</span>' : '';
+      return `<div class="item" style="padding:10px 12px">
+        <div class="item-info">
+          <div class="item-title" style="font-size:0.88rem">${esc(ts)}${label}</div>
+          ${(added || deleted) ? `<div class="item-meta">+${added || 0} / -${deleted || 0} Zeichen</div>` : ''}
+        </div>
+        ${i > 0 ? `<button class="btn btn-ghost btn-sm" data-version="${esc(v.version)}"
+          onclick="restoreVersion(this.dataset.version, '${esc(ts)}')">Wiederherstellen</button>` : ''}
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--red);font-size:0.85rem">Fehler: ${esc(e.message)}</div>`;
+  }
+}
+
+async function restoreVersion(version, label) {
+  if (!confirm(`Version vom ${label} wiederherstellen?\n\nAktuelle Daten werden überschrieben — aber zuerst wird das aktuelle Backup gespeichert.`)) return;
+  const token  = localStorage.getItem(GIST_TOKEN_KEY);
+  const gistId = localStorage.getItem(GIST_ID_KEY);
+  try {
+    // Erst aktuelle Version sichern
+    await pushToGist();
+    const r = await fetch(`https://api.github.com/gists/${gistId}/${version}`,
+      { headers: { Authorization: 'token ' + token } }
+    );
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j    = await r.json();
+    const file = j.files[GIST_FILE];
+    if (!file) throw new Error('Datei nicht gefunden in dieser Version');
+    const restored = JSON.parse(file.content);
+    if (!isValidSchema(restored)) throw new Error('Ungültiges Datenformat');
+    data = restored;
+    save();   // Speichert und pusht wieder zu Gist
+    renderAll();
+    closeModal('settings-modal');
+    alert(`✓ Version vom ${label} erfolgreich wiederhergestellt.`);
+  } catch(e) {
+    alert('Fehler beim Wiederherstellen: ' + e.message);
+  }
+}
+
+// ── Einstellungen ─────────────────────────────
+
+function openSettingsModal() {
+  document.getElementById('cfg-token').value   = localStorage.getItem(GIST_TOKEN_KEY) || '';
+  document.getElementById('cfg-gist-id').value = localStorage.getItem(GIST_ID_KEY)    || '';
+  document.getElementById('version-list').innerHTML = '';
+  document.getElementById('settings-modal').classList.add('open');
+}
+
+function saveSettings() {
+  const token  = document.getElementById('cfg-token').value.trim();
+  const gistId = document.getElementById('cfg-gist-id').value.trim();
+  if (token)  localStorage.setItem(GIST_TOKEN_KEY, token);
+  else        localStorage.removeItem(GIST_TOKEN_KEY);
+  if (gistId) localStorage.setItem(GIST_ID_KEY, gistId);
+  else        localStorage.removeItem(GIST_ID_KEY);
+  closeModal('settings-modal');
+  if (token) pushToGist();
+}
+
+function clearSettings() {
+  if (!confirm('Gist-Verbindung trennen? Lokale Daten bleiben erhalten.')) return;
+  localStorage.removeItem(GIST_TOKEN_KEY);
+  localStorage.removeItem(GIST_ID_KEY);
+  document.getElementById('cfg-token').value   = '';
+  document.getElementById('cfg-gist-id').value = '';
+  setSyncStatus('idle', '');
+}
+
+// ── Select-Optionen einmalig befüllen ─────────
+
+function populateStaticSelects() {
+  const roleOpts  = ROLES.map(r       => `<option value="${esc(r)}">${esc(r)}</option>`).join('');
+  const typeOpts  = EVENT_TYPES.map(t => `<option value="${esc(t)}">${esc(t)}</option>`).join('');
+  document.getElementById('sf-role').innerHTML  = roleOpts;
+  document.getElementById('ef-type').innerHTML  = typeOpts;
+  document.getElementById('shf-role').innerHTML = roleOpts;
 }
 
 // ── Init ──────────────────────────────────────
 
 async function init() {
-  load();        // localStorage sofort laden (schnell, offline)
+  populateStaticSelects();
+  load();
   initTabs();
-  renderAll();   // App ist sofort nutzbar
-
-  // Dann aus Gist laden (überschreibt falls neuer)
+  renderAll();
   if (localStorage.getItem(GIST_TOKEN_KEY)) {
     await pullFromGist();
   } else {

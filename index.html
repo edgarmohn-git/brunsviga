@@ -273,48 +273,114 @@
 </div>
 
 <!-- ══════════════════════════════════════════ -->
-<!-- MODAL: Einstellungen / Cloud-Backup       -->
+<!-- MODAL: Einstellungen                      -->
 <!-- ══════════════════════════════════════════ -->
 <div class="modal-overlay" id="settings-modal">
-  <div class="modal" style="width:560px">
-    <h2>⚙ Cloud-Backup (GitHub Gist)</h2>
+  <div class="modal" style="width:600px;max-height:88vh">
 
-    <p style="font-size:0.88rem;color:#888;margin-bottom:16px">
-      Alle Daten werden bei jedem Speichern automatisch in ein privates GitHub Gist gesichert.
-      So gehen keine Daten verloren — auch wenn du den Browser-Cache leerst oder ein anderes Gerät nutzt.
-    </p>
-
-    <div class="form-group">
-      <label>GitHub Personal Access Token</label>
-      <input type="password" id="cfg-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off" />
-      <span style="font-size:0.78rem;color:#666;margin-top:4px;display:block">
-        Nur „Gist"-Berechtigung nötig. Token wird nur lokal in diesem Browser gespeichert.
-      </span>
+    <!-- Tabs -->
+    <div style="display:flex;gap:4px;margin-bottom:20px;border-bottom:1px solid #2a2a4a;padding-bottom:12px">
+      <button class="btn btn-primary btn-sm settings-tab active" data-stab="cloud">☁ Cloud-Backup</button>
+      <button class="btn btn-ghost btn-sm settings-tab" data-stab="versions">🕐 Versionshistorie</button>
+      <button class="btn btn-ghost btn-sm settings-tab" data-stab="import">📂 Import / Export</button>
     </div>
 
-    <div class="form-group">
-      <label>Gist-ID (wird beim ersten Speichern automatisch eingetragen)</label>
-      <input type="text" id="cfg-gist-id" placeholder="Wird automatisch erstellt …" autocomplete="off" />
-      <span style="font-size:0.78rem;color:#666;margin-top:4px;display:block">
-        Um auf einem anderen Gerät dieselben Daten zu nutzen: Token + diese ID dort eingeben.
-      </span>
+    <!-- ── Tab: Cloud-Backup ── -->
+    <div id="stab-cloud" class="stab-content">
+      <p style="font-size:0.88rem;color:#888;margin-bottom:16px">
+        Daten werden bei jedem Speichern automatisch in ein privates GitHub Gist gesichert.
+      </p>
+      <div class="form-group">
+        <label>GitHub Personal Access Token</label>
+        <input type="password" id="cfg-token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" autocomplete="off" />
+        <span style="font-size:0.78rem;color:#666;margin-top:4px;display:block">Nur „gist"-Berechtigung nötig.</span>
+      </div>
+      <div class="form-group">
+        <label>Gist-ID</label>
+        <input type="text" id="cfg-gist-id" placeholder="Wird automatisch erstellt …" autocomplete="off" />
+        <span style="font-size:0.78rem;color:#666;margin-top:4px;display:block">Beim ersten Verbinden automatisch ausgefüllt.</span>
+      </div>
+      <div style="background:#0d0d1a;border-radius:8px;padding:12px;margin:10px 0;font-size:0.82rem;color:#888;line-height:1.7">
+        <strong style="color:#eaeaea;display:block;margin-bottom:4px">Einmalige Einrichtung:</strong>
+        github.com → Profilbild → Settings → Developer settings → Personal access tokens → Tokens (classic)
+        → Generate new token → Haken bei <strong style="color:#a98edd">gist</strong> → Generate → Token kopieren → hier einfügen
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="saveSettings()">Verbinden &amp; synchronisieren</button>
+        <button class="btn btn-ghost" onclick="closeModal('settings-modal')">Abbrechen</button>
+        <button class="btn btn-danger" onclick="clearSettings()" style="margin-left:auto">Trennen</button>
+      </div>
     </div>
 
-    <div style="background:#0d0d1a;border-radius:8px;padding:14px;margin:12px 0;font-size:0.82rem;color:#888;line-height:1.7">
-      <strong style="color:#eaeaea;display:block;margin-bottom:6px">Einmalige Einrichtung (5 Minuten):</strong>
-      1. github.com aufrufen → oben rechts auf dein Profilbild klicken → „Settings"<br>
-      2. Ganz unten links: „Developer settings" → „Personal access tokens" → „Tokens (classic)"<br>
-      3. „Generate new token (classic)" → Name z.B. „Brunsviga" → Haken bei <strong style="color:#a98edd">gist</strong> → „Generate"<br>
-      4. Den angezeigten Token kopieren und hier oben einfügen → „Verbinden"
+    <!-- ── Tab: Versionshistorie ── -->
+    <div id="stab-versions" class="stab-content" style="display:none">
+      <p style="font-size:0.88rem;color:#888;margin-bottom:14px">
+        GitHub speichert automatisch jede Version. Hier kannst du frühere Stände ansehen und wiederherstellen.
+      </p>
+      <button class="btn btn-secondary" onclick="loadVersionHistory()" style="margin-bottom:14px">Versionen laden</button>
+      <div id="version-list" class="item-list" style="max-height:320px;overflow-y:auto"></div>
+      <div class="btn-row" style="margin-top:14px">
+        <button class="btn btn-ghost" onclick="closeModal('settings-modal')">Schließen</button>
+      </div>
     </div>
 
-    <div class="btn-row">
-      <button class="btn btn-primary" onclick="saveSettings()">Verbinden &amp; sofort synchronisieren</button>
-      <button class="btn btn-ghost" onclick="closeModal('settings-modal')">Abbrechen</button>
-      <button class="btn btn-danger" onclick="clearSettings()" style="margin-left:auto">Verbindung trennen</button>
+    <!-- ── Tab: Import / Export ── -->
+    <div id="stab-import" class="stab-content" style="display:none">
+      <p style="font-size:0.88rem;color:#888;margin-bottom:16px">
+        Vollbackup als JSON, oder Personal/Events aus einer CSV-Tabelle importieren.
+      </p>
+
+      <h3 style="font-size:0.9rem;color:var(--text);margin-bottom:10px">JSON Vollbackup</h3>
+      <div class="btn-row" style="margin-bottom:20px">
+        <button class="btn btn-secondary" onclick="downloadJSONBackup()">⬇ Backup herunterladen</button>
+        <button class="btn btn-ghost"     onclick="restoreFromJSON()">⬆ Backup wiederherstellen</button>
+      </div>
+
+      <h3 style="font-size:0.9rem;color:var(--text);margin-bottom:6px">CSV-Import</h3>
+      <p style="font-size:0.82rem;color:#666;margin-bottom:10px">
+        Spalten mit Semikolon trennen. Excel → Speichern als → CSV (Trennzeichen-getrennt).
+      </p>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div style="background:#0d0d1a;border-radius:8px;padding:12px">
+          <div style="font-size:0.82rem;font-weight:700;margin-bottom:6px">Personal</div>
+          <div style="font-size:0.75rem;color:#666;margin-bottom:8px">Name · Rolle · Telefon · Notizen · Aktiv</div>
+          <div class="btn-row" style="flex-direction:column;gap:6px">
+            <button class="btn btn-ghost btn-sm" onclick="downloadStaffTemplate()">⬇ Vorlage</button>
+            <button class="btn btn-primary btn-sm" onclick="importStaffCSV()">⬆ Importieren</button>
+          </div>
+        </div>
+        <div style="background:#0d0d1a;border-radius:8px;padding:12px">
+          <div style="font-size:0.82rem;font-weight:700;margin-bottom:6px">Events</div>
+          <div style="font-size:0.75rem;color:#666;margin-bottom:8px">Titel · Datum · Beginn · Ende · Typ · Notizen</div>
+          <div class="btn-row" style="flex-direction:column;gap:6px">
+            <button class="btn btn-ghost btn-sm" onclick="downloadEventsTemplate()">⬇ Vorlage</button>
+            <button class="btn btn-primary btn-sm" onclick="importEventsCSV()">⬆ Importieren</button>
+          </div>
+        </div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-ghost" onclick="closeModal('settings-modal')">Schließen</button>
+      </div>
     </div>
+
   </div>
 </div>
+
+<script>
+// Settings-Tab-Navigation
+document.querySelectorAll('.settings-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.settings-tab').forEach(b => {
+      b.classList.remove('active', 'btn-primary');
+      b.classList.add('btn-ghost');
+    });
+    btn.classList.add('active', 'btn-primary');
+    btn.classList.remove('btn-ghost');
+    document.querySelectorAll('.stab-content').forEach(t => t.style.display = 'none');
+    document.getElementById('stab-' + btn.dataset.stab).style.display = 'block';
+  });
+});
+</script>
 
 <script src="seed.js"></script>
 <script src="app.js"></script>
