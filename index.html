@@ -97,27 +97,23 @@
     <!-- TAB: DIENSTPLAN                        -->
     <!-- ══════════════════════════════════════ -->
     <div id="tab-roster" class="tab-content">
-      <div class="section-header">
+      <div class="section-header" style="flex-wrap:wrap;gap:8px">
         <h2>Dienstplan</h2>
-        <div style="display:flex;gap:10px;align-items:center">
-          <input type="date" id="roster-date" onchange="renderRoster()" style="width:auto" />
-          <button class="btn btn-ghost" onclick="exportRosterCSV()">CSV Export</button>
-          <button class="btn btn-primary" onclick="openShiftModal(null)">+ Schicht eintragen</button>
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-left:auto">
+          <div style="display:flex;gap:2px">
+            <button class="btn btn-ghost btn-sm view-btn" data-view="day"   onclick="setRosterView('day')">Tag</button>
+            <button class="btn btn-primary btn-sm view-btn" data-view="week"  onclick="setRosterView('week')">Woche</button>
+            <button class="btn btn-ghost btn-sm view-btn" data-view="month" onclick="setRosterView('month')">Monat</button>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="rosterNav(-1)">‹</button>
+          <span id="roster-nav-label" style="font-size:0.85rem;min-width:140px;text-align:center;color:var(--text-muted)"></span>
+          <button class="btn btn-ghost btn-sm" onclick="rosterNav(1)">›</button>
+          <button class="btn btn-ghost btn-sm" onclick="rosterNavToday()">Heute</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportRosterCSV()">CSV</button>
+          <button class="btn btn-primary btn-sm" onclick="openShiftModal(null)">+ Schicht</button>
         </div>
       </div>
-      <table class="roster-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Rolle</th>
-            <th>Uhrzeit</th>
-            <th>Event</th>
-            <th>Notiz</th>
-            <th></th>
-          </tr>
-        </thead>
-        <tbody id="roster-tbody"></tbody>
-      </table>
+      <div id="roster-content"></div>
     </div>
 
   </main>
@@ -190,6 +186,10 @@
         <label>Ende</label>
         <input type="time" id="ef-end" />
       </div>
+    </div>
+    <div class="form-group">
+      <label>Veranstalter</label>
+      <input type="text" id="ef-veranstalter" placeholder="z.B. Brunsviga e.V., Gastveranstalter …" />
     </div>
     <div class="form-group">
       <label>Notizen</label>
@@ -381,6 +381,12 @@ document.querySelectorAll('.settings-tab').forEach(btn => {
   });
 });
 </script>
+
+<div id="ev-tooltip">
+  <div class="tt-title"></div>
+  <div class="tt-meta"></div>
+  <div class="tt-note"></div>
+</div>
 
 <script src="seed.js"></script>
 <script src="app.js"></script>

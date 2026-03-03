@@ -10,11 +10,20 @@ const GIST_FILE      = 'brunsviga-data.json';
 
 const ROLES = [
   'Leitung', 'Barkeeper', 'Service', 'Kasse', 'Technik',
-  'Bühne', 'Security', 'Springer', 'Extern'
+  'Bühne', 'Security', 'Springer', 'Extern',
+  'Veranstalter', 'Eintreffen Technik', 'Einlass', 'Show',
+  'Krank', 'Frei', 'Schule',
 ];
+const ABSENCE_ROLES  = new Set(['Krank', 'Frei', 'Schule']);
+const ABSENCE_COLORS = { Krank: '#c0392b', Frei: '#27ae60', Schule: '#2980b9' };
 const EVENT_TYPES = [
   'Konzert', 'Comedy', 'Theater', 'Kabarett', 'Party',
   'Lesung', 'Workshop', 'Probe', 'Privat', 'Sonstiges'
+];
+
+const STAFF_COLORS = [
+  '#e94560', '#3498db', '#2ecc71', '#f39c12',
+  '#9b59b6', '#1abc9c', '#e67e22', '#16a085',
 ];
 
 // ── State ─────────────────────────────────────
@@ -26,8 +35,10 @@ let data = {
   shifts: [],   // { id, staffId, eventId|null, date, start, end, role, notes }
 };
 
-let editingId = null;
-let gistTimer = null;
+let editingId  = null;
+let gistTimer  = null;
+let rosterView = 'week';   // 'day' | 'week' | 'month'
+let rosterDate = isoDate(new Date());
 
 // ── Security: HTML escaping (XSS prevention) ──
 
@@ -66,10 +77,11 @@ function load() {
       setSyncStatus('error', 'Lokale Daten beschädigt');
     }
   }
-  // Seed nur beim echten Erststart (beide Arrays leer)
+  // Seed nur beim echten Erststart (events noch leer)
   if (data.events.length === 0) {
     if (typeof getSeedEvents === 'function') data.events = getSeedEvents();
     if (typeof getSeedStaff  === 'function') data.staff  = getSeedStaff();
+    if (typeof getSeedShifts === 'function') data.shifts = getSeedShifts();
     if (data.events.length > 0 || data.staff.length > 0) {
       data.lastModified = Date.now();
       localStorage.setItem(STORE_KEY, JSON.stringify(data));
@@ -102,6 +114,12 @@ function initTabs() {
 
 // ── Helpers ───────────────────────────────────
 
+function isoDate(d) {
+  return d.getFullYear() + '-'
+    + String(d.getMonth() + 1).padStart(2, '0') + '-'
+    + String(d.getDate()).padStart(2, '0');
+}
+function isoToday()      { return isoDate(new Date()); }
 function formatDate(iso) {
   if (!iso) return '—';
   const d = new Date(iso + 'T00:00:00');
@@ -109,14 +127,13 @@ function formatDate(iso) {
 }
 function formatTime(t)   { return t || '—'; }
 function staffName(id)   { const s = data.staff.find(x => x.id === id);  return s ? s.name : '?'; }
-function isoToday()      { return new Date().toISOString().slice(0, 10); }
 
 function weekDays() {
   const today = new Date();
   return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(today);
     d.setDate(today.getDate() + i);
-    return d.toISOString().slice(0, 10);
+    return isoDate(d);
   });
 }
 
@@ -143,14 +160,23 @@ function renderDashboard() {
       const required = (ev.requiredStaff  || []).reduce((s, r) => s + r.count, 0);
       const sc = assigned >= required ? 'badge-green' : assigned > 0 ? 'badge-amber' : 'badge-red';
       const st = assigned >= required ? 'Besetzt' : assigned > 0 ? 'Teilbesetzt' : 'Offen';
-      return `<div class="item">
+      const veranst = ev.veranstalter ? ` · ${esc(ev.veranstalter)}` : '';
+      const technik = data.shifts
+        .filter(s => s.date === ev.date && (s.role === 'Technik' || s.role === 'Eintreffen Technik'))
+        .map(s => staffName(s.staffId)).filter(n => n !== '?');
+      const techStr = technik.length ? ` · 🔧 ${technik.join(', ')}` : '';
+      return `<div class="item item-clickable" data-id="${esc(ev.id)}"
+          onclick="openAssignModal(this.dataset.id)"
+          onmouseenter="showEvTooltip(event,this.dataset.id)"
+          onmouseleave="hideTooltip()">
         <div class="item-info">
           <div class="item-title">${esc(ev.title)}</div>
-          <div class="item-meta">${esc(formatDate(ev.date))} · ${esc(formatTime(ev.start))}–${esc(formatTime(ev.end))} · ${esc(ev.type || '')}</div>
+          <div class="item-meta">${esc(formatDate(ev.date))} · ${esc(formatTime(ev.start))}–${esc(formatTime(ev.end))} · ${esc(ev.type || '')}${veranst}${techStr}</div>
         </div>
         <span class="badge ${sc}">${st}</span>
         <div class="item-actions">
-          <button class="btn btn-ghost btn-sm" data-id="${esc(ev.id)}" onclick="openEventModal(this.dataset.id)">Details</button>
+          <button class="btn btn-ghost btn-sm" data-id="${esc(ev.id)}"
+            onclick="event.stopPropagation();openEventModal(this.dataset.id)">✏</button>
         </div>
       </div>`;
     }).join('');
@@ -185,12 +211,20 @@ function renderStaff() {
     list.innerHTML = '<div class="empty-state">Noch kein Personal angelegt.</div>';
     return;
   }
+  const today2 = isoToday();
   list.innerHTML = [...active, ...inactive].map(s => {
     const off = s.active === false;
+    const nextShift = data.shifts
+      .filter(sh => sh.staffId === s.id && sh.date >= today2 && !ABSENCE_ROLES.has(sh.role))
+      .sort((a, b) => a.date.localeCompare(b.date) || (a.start||'').localeCompare(b.start||''))[0];
+    const nextStr = nextShift
+      ? `Nächste Schicht: ${esc(formatDate(nextShift.date))} ${esc(nextShift.start||'')}${nextShift.role ? ` · ${esc(nextShift.role)}` : ''}`
+      : 'Keine Schichten geplant';
     return `<div class="item" style="${off ? 'opacity:0.5' : ''}">
       <div class="item-info">
         <div class="item-title">${esc(s.name)} ${off ? '<span class="badge badge-gray">Inaktiv</span>' : ''}</div>
         <div class="item-meta">${esc(s.role || '—')}${s.phone ? ' · ' + esc(s.phone) : ''}</div>
+        <div class="item-meta" style="color:#666">${nextStr}</div>
         ${s.notes ? `<div class="item-meta">${esc(s.notes)}</div>` : ''}
       </div>
       <div class="item-actions">
@@ -233,7 +267,8 @@ function saveStaffModal() {
 }
 
 function deleteStaff(id) {
-  if (!confirm('Person wirklich löschen?')) return;
+  const s = data.staff.find(x => x.id === id);
+  if (!confirm(`"${s ? s.name : 'Person'}" wirklich löschen?\n\nAlle Schichten dieser Person werden ebenfalls entfernt.`)) return;
   data.staff  = data.staff.filter(s => s.id !== id);
   data.shifts = data.shifts.filter(s => s.staffId !== id);
   data.events.forEach(ev => {
@@ -261,9 +296,12 @@ function renderEvents() {
     const required = (ev.requiredStaff  || []).reduce((s, r) => s + r.count, 0);
     const sc = assigned >= required ? 'badge-green' : assigned > 0 ? 'badge-amber' : 'badge-red';
     const st = assigned >= required ? 'Besetzt' : `${assigned}/${required}`;
-    return `<div class="item">
+    const veranst = ev.veranstalter ? `<span style="color:#888;font-size:0.75rem"> · ${esc(ev.veranstalter)}</span>` : '';
+    return `<div class="item" data-id="${esc(ev.id)}"
+        onmouseenter="showEvTooltip(event,this.dataset.id)"
+        onmouseleave="hideTooltip()">
       <div class="item-info">
-        <div class="item-title">${esc(ev.title)}</div>
+        <div class="item-title">${esc(ev.title)}${veranst}</div>
         <div class="item-meta">${esc(formatDate(ev.date))} · ${esc(formatTime(ev.start))}–${esc(formatTime(ev.end))} · <span class="badge badge-blue">${esc(ev.type || 'Sonstiges')}</span></div>
         ${ev.notes ? `<div class="item-meta">${esc(ev.notes)}</div>` : ''}
       </div>
@@ -281,12 +319,13 @@ function openEventModal(id) {
   editingId = id || null;
   const ev = id ? data.events.find(x => x.id === id) : null;
   document.getElementById('event-modal-title').textContent = ev ? 'Event bearbeiten' : 'Neues Event';
-  document.getElementById('ef-title').value = ev ? ev.title        : '';
-  document.getElementById('ef-date').value  = ev ? ev.date         : isoToday();
-  document.getElementById('ef-start').value = ev ? (ev.start || '') : '20:00';
-  document.getElementById('ef-end').value   = ev ? (ev.end   || '') : '23:00';
-  document.getElementById('ef-notes').value = ev ? (ev.notes || '') : '';
-  document.getElementById('ef-type').value  = ev ? (ev.type  || EVENT_TYPES[0]) : EVENT_TYPES[0];
+  document.getElementById('ef-title').value      = ev ? ev.title              : '';
+  document.getElementById('ef-date').value       = ev ? ev.date               : isoToday();
+  document.getElementById('ef-start').value      = ev ? (ev.start || '')      : '20:00';
+  document.getElementById('ef-end').value        = ev ? (ev.end   || '')      : '23:00';
+  document.getElementById('ef-notes').value      = ev ? (ev.notes || '')      : '';
+  document.getElementById('ef-type').value       = ev ? (ev.type  || EVENT_TYPES[0]) : EVENT_TYPES[0];
+  document.getElementById('ef-veranstalter').value = ev ? (ev.veranstalter || '') : '';
   renderRequiredStaffRows(ev ? (ev.requiredStaff || []) : []);
   document.getElementById('event-modal').classList.add('open');
 }
@@ -327,6 +366,7 @@ function saveEventModal() {
     end:           document.getElementById('ef-end').value,
     type:          document.getElementById('ef-type').value,
     notes:         document.getElementById('ef-notes').value.trim(),
+    veranstalter:  document.getElementById('ef-veranstalter').value.trim(),
     requiredStaff: rows,
   };
   if (editingId) {
@@ -339,7 +379,8 @@ function saveEventModal() {
 }
 
 function deleteEvent(id) {
-  if (!confirm('Event wirklich löschen?')) return;
+  const ev = data.events.find(x => x.id === id);
+  if (!confirm(`"${ev ? ev.title : 'Event'}" wirklich löschen?\n\nVerknüpfte Schichten werden ebenfalls entfernt.`)) return;
   data.events = data.events.filter(e => e.id !== id);
   data.shifts = data.shifts.filter(s => s.eventId !== id);
   save(); renderAll();
@@ -392,37 +433,239 @@ function saveAssignModal() {
 
 // ── DIENSTPLAN ────────────────────────────────
 
+function staffColor(id) {
+  const idx = data.staff.findIndex(s => s.id === id);
+  return STAFF_COLORS[Math.max(0, idx) % STAFF_COLORS.length];
+}
+
+function shiftColor(shift) {
+  if (ABSENCE_ROLES.has(shift.role)) return ABSENCE_COLORS[shift.role] || '#888';
+  return staffColor(shift.staffId);
+}
+
+function weekStart(iso) {
+  const d   = new Date(iso + 'T00:00:00');
+  const dow = d.getDay();                    // 0=So … 6=Sa
+  d.setDate(d.getDate() - (dow === 0 ? 6 : dow - 1));  // zurück auf Montag
+  return d;
+}
+
+function setRosterView(view) {
+  rosterView = view;
+  document.querySelectorAll('.view-btn').forEach(b => {
+    const active = b.dataset.view === view;
+    b.classList.toggle('btn-primary', active);
+    b.classList.toggle('btn-ghost', !active);
+  });
+  renderRoster();
+}
+
+function rosterNav(dir) {
+  const d = new Date(rosterDate + 'T00:00:00');
+  if      (rosterView === 'day')   d.setDate(d.getDate() + dir);
+  else if (rosterView === 'week')  d.setDate(d.getDate() + dir * 7);
+  else                             d.setMonth(d.getMonth() + dir);
+  rosterDate = isoDate(d);
+  renderRoster();
+}
+
+function rosterNavToday() {
+  rosterDate = isoToday();
+  renderRoster();
+}
+
 function renderRoster() {
-  const filter = document.getElementById('roster-date').value || isoToday();
-  const shifts = data.shifts
-    .filter(s => s.date === filter)
+  // Nav label
+  const d = new Date(rosterDate + 'T00:00:00');
+  const el = document.getElementById('roster-nav-label');
+  if (el) {
+    if (rosterView === 'day') {
+      el.textContent = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit', year: 'numeric' });
+    } else if (rosterView === 'week') {
+      const mon = weekStart(rosterDate);
+      const sun = new Date(mon.getTime() + 6 * 86400000);
+      el.textContent = `${mon.getDate()}.${mon.getMonth()+1}. – ${sun.getDate()}.${sun.getMonth()+1}.${sun.getFullYear()}`;
+    } else {
+      el.textContent = d.toLocaleDateString('de-DE', { month: 'long', year: 'numeric' });
+    }
+  }
+  if      (rosterView === 'day')   renderRosterDay();
+  else if (rosterView === 'week')  renderRosterWeek();
+  else                             renderRosterMonth();
+}
+
+function renderRosterDay() {
+  const shifts    = data.shifts
+    .filter(s => s.date === rosterDate)
     .sort((a, b) => (a.start || '').localeCompare(b.start || ''));
-  const tbody = document.getElementById('roster-tbody');
+  const dayEvents = data.events.filter(e => e.date === rosterDate);
+  const container = document.getElementById('roster-content');
+
+  let html = '';
+  // Events des Tages als Info-Header
+  if (dayEvents.length > 0) {
+    html += '<div style="margin-bottom:12px;display:flex;flex-wrap:wrap;gap:6px">';
+    dayEvents.forEach(ev => {
+      const veranst = ev.veranstalter ? ` · ${esc(ev.veranstalter)}` : '';
+      html += `<div class="item" style="flex:1;min-width:200px;cursor:pointer"
+          data-id="${esc(ev.id)}"
+          onclick="openAssignModal(this.dataset.id)"
+          onmouseenter="showEvTooltip(event,this.dataset.id)"
+          onmouseleave="hideTooltip()">
+        <div class="item-info">
+          <div class="item-title">${esc(ev.title)}</div>
+          <div class="item-meta">${esc(formatTime(ev.start))} Einlass · ${esc(formatTime(ev.end))} Ende · ${esc(ev.type||'')}${veranst}</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" data-id="${esc(ev.id)}"
+          onclick="event.stopPropagation();openEventModal(this.dataset.id)">✏</button>
+      </div>`;
+    });
+    html += '</div>';
+  }
+
   if (shifts.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty-state">Keine Schichten für diesen Tag.</td></tr>`;
+    html += '<div class="empty-state">Keine Schichten für diesen Tag.</div>';
+    container.innerHTML = html;
     return;
   }
-  tbody.innerHTML = shifts.map(s => {
-    const ev = s.eventId ? data.events.find(x => x.id === s.eventId) : null;
-    return `<tr>
-      <td><strong>${esc(staffName(s.staffId))}</strong></td>
-      <td><span class="badge badge-blue">${esc(s.role || '—')}</span></td>
-      <td>${esc(formatTime(s.start))} – ${esc(formatTime(s.end))}</td>
-      <td>${ev ? esc(ev.title) : '—'}</td>
-      <td>${esc(s.notes || '')}</td>
-      <td>
-        <button class="btn btn-ghost btn-sm" data-id="${esc(s.id)}" onclick="openShiftModal(this.dataset.id)">✏</button>
-        <button class="btn btn-danger btn-sm" data-id="${esc(s.id)}" onclick="deleteShift(this.dataset.id)">✕</button>
-      </td>
-    </tr>`;
-  }).join('');
+  // Fallback-Event für Schichten ohne eventId (erster Event des Tages)
+  const fallbackEv = dayEvents[0] || null;
+  html += `<table class="roster-table">
+    <thead><tr>
+      <th>Name</th><th>Rolle</th><th>Uhrzeit</th><th>Veranstaltung</th><th>Notiz</th><th></th>
+    </tr></thead>
+    <tbody>${shifts.map(s => {
+      const ev    = s.eventId ? data.events.find(x => x.id === s.eventId) : fallbackEv;
+      const color = staffColor(s.staffId);
+      return `<tr>
+        <td><strong style="color:${esc(color)}">${esc(staffName(s.staffId))}</strong></td>
+        <td><span class="badge badge-blue">${esc(s.role || '—')}</span></td>
+        <td>${esc(formatTime(s.start))} – ${esc(formatTime(s.end))}</td>
+        <td>${ev ? esc(ev.title) : '—'}</td>
+        <td>${esc(s.notes || '')}</td>
+        <td>
+          <button class="btn btn-ghost btn-sm" data-id="${esc(s.id)}" onclick="openShiftModal(this.dataset.id)">✏</button>
+          <button class="btn btn-danger btn-sm" data-id="${esc(s.id)}" onclick="deleteShift(this.dataset.id)">✕</button>
+        </td>
+      </tr>`;
+    }).join('')}</tbody>
+  </table>`;
+  container.innerHTML = html;
+}
+
+function renderRosterWeek() {
+  const mon    = weekStart(rosterDate);
+  const today  = isoToday();
+  const days   = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(mon.getTime() + i * 86400000);
+    return isoDate(d);
+  });
+  const active = data.staff.filter(s => s.active !== false);
+  const container = document.getElementById('roster-content');
+  if (active.length === 0) {
+    container.innerHTML = '<div class="empty-state">Kein Personal angelegt.</div>';
+    return;
+  }
+  let html = '<div class="week-grid">';
+  // Header
+  html += '<div class="week-cell-header"></div>';
+  days.forEach(iso => {
+    const d = new Date(iso + 'T00:00:00');
+    const label = d.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' });
+    html += `<div class="week-cell-header${iso === today ? ' today' : ''}">${esc(label)}</div>`;
+  });
+  // Veranstaltungs-Zeile
+  html += '<div class="week-staff-label" style="color:#d5bfff;font-weight:700;border-left:3px solid #8b68e0;background:rgba(83,52,131,0.3)">📅 Veranstaltung</div>';
+  days.forEach(iso => {
+    const dayEvs = data.events.filter(e => e.date === iso);
+    html += `<div class="week-cell${iso === today ? ' today' : ''}" style="background:rgba(83,52,131,0.1)">`;
+    if (dayEvs.length === 0) {
+      html += '<div style="font-size:0.65rem;color:#444;text-align:center;padding:4px">—</div>';
+    }
+    dayEvs.forEach(ev => {
+      const veranstStr = ev.veranstalter ? ` · ${esc(ev.veranstalter)}` : '';
+      html += `<div class="week-event-row" data-id="${esc(ev.id)}"
+          onclick="openAssignModal(this.dataset.id)"
+          onmouseenter="showEvTooltip(event,this.dataset.id)"
+          onmouseleave="hideTooltip()">${esc(ev.title)}${veranstStr}</div>`;
+    });
+    html += '</div>';
+  });
+  // Rows per staff
+  active.forEach(staff => {
+    const color = staffColor(staff.id);
+    html += `<div class="week-staff-label" style="border-left:3px solid ${esc(color)}">${esc(staff.name)}</div>`;
+    days.forEach(iso => {
+      const dayShifts = data.shifts.filter(s => s.staffId === staff.id && s.date === iso);
+      html += `<div class="week-cell${iso === today ? ' today' : ''}">`;
+      dayShifts.forEach(shift => {
+        const sc     = shiftColor(shift);
+        const isAbs  = ABSENCE_ROLES.has(shift.role);
+        const label  = isAbs ? esc(shift.role) : `${esc(shift.start)}–${esc(shift.end)}`;
+        html += `<div class="shift-pill" style="background:${esc(sc)}"
+            data-id="${esc(shift.id)}"
+            onmouseenter="showShiftTooltip(event,this.dataset.id)"
+            onmouseleave="hideTooltip()">${label}</div>`;
+      });
+      html += '</div>';
+    });
+  });
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderRosterMonth() {
+  const d        = new Date(rosterDate + 'T00:00:00');
+  const year     = d.getFullYear();
+  const month    = d.getMonth();
+  const today    = isoToday();
+  const firstDay = new Date(year, month, 1);
+  const lastDay  = new Date(year, month + 1, 0);
+  const startPad = firstDay.getDay() === 0 ? 6 : firstDay.getDay() - 1;
+  const container = document.getElementById('roster-content');
+
+  let html = '<div class="month-view">';
+  ['Mo','Di','Mi','Do','Fr','Sa','So'].forEach(n => {
+    html += `<div class="month-weekday-header">${n}</div>`;
+  });
+  for (let i = 0; i < startPad; i++) html += '<div class="month-day-cell other-month"></div>';
+  for (let day = 1; day <= lastDay.getDate(); day++) {
+    const iso    = `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    const isToday = iso === today;
+    const dayShifts = data.shifts.filter(s => s.date === iso);
+    const dayEvs    = data.events.filter(e => e.date === iso);
+    html += `<div class="month-day-cell${isToday ? ' today' : ''}" data-iso="${esc(iso)}" onclick="rosterDate=this.dataset.iso;setRosterView('day')">`;
+    html += `<div class="month-day-num">${day}</div>`;
+    dayEvs.forEach(ev => {
+      html += `<div class="month-event-label" data-id="${esc(ev.id)}"
+          onclick="event.stopPropagation();openAssignModal(this.dataset.id)"
+          onmouseenter="showEvTooltip(event,this.dataset.id)"
+          onmouseleave="hideTooltip()">${esc(ev.title)}</div>`;
+    });
+    dayShifts.forEach(shift => {
+      const color  = shiftColor(shift);
+      const name   = staffName(shift.staffId);
+      const isAbs  = ABSENCE_ROLES.has(shift.role);
+      const label  = isAbs ? `${name.split(' ')[0]} · ${shift.role}` : `${name.split(' ')[0]} ${shift.start}`;
+      html += `<div class="month-shift-dot" style="background:${esc(color)}"
+          data-id="${esc(shift.id)}"
+          onmouseenter="showShiftTooltip(event,this.dataset.id)"
+          onmouseleave="hideTooltip()">${esc(label)}</div>`;
+    });
+    html += '</div>';
+  }
+  const used = startPad + lastDay.getDate();
+  const endPad = used % 7 === 0 ? 0 : 7 - (used % 7);
+  for (let i = 0; i < endPad; i++) html += '<div class="month-day-cell other-month"></div>';
+  html += '</div>';
+  container.innerHTML = html;
 }
 
 function openShiftModal(id) {
   editingId = id || null;
   const s = id ? data.shifts.find(x => x.id === id) : null;
   document.getElementById('shift-modal-title').textContent = s ? 'Schicht bearbeiten' : 'Neue Schicht';
-  document.getElementById('shf-date').value  = s ? s.date         : (document.getElementById('roster-date').value || isoToday());
+  document.getElementById('shf-date').value  = s ? s.date         : (rosterDate || isoToday());
   document.getElementById('shf-start').value = s ? (s.start || '') : '18:00';
   document.getElementById('shf-end').value   = s ? (s.end   || '') : '23:00';
   document.getElementById('shf-notes').value = s ? (s.notes || '') : '';
@@ -470,7 +713,10 @@ function saveShiftModal() {
 }
 
 function deleteShift(id) {
-  if (!confirm('Schicht löschen?')) return;
+  const s = data.shifts.find(x => x.id === id);
+  const name = s ? staffName(s.staffId) : 'Schicht';
+  const date = s ? ` am ${formatDate(s.date)}` : '';
+  if (!confirm(`Schicht von "${name}"${date} wirklich löschen?`)) return;
   data.shifts = data.shifts.filter(s => s.id !== id);
   save(); renderRoster();
 }
@@ -863,6 +1109,80 @@ function clearSettings() {
   document.getElementById('cfg-gist-id').value = '';
   setSyncStatus('idle', '');
 }
+
+// ── Tooltip ───────────────────────────────────
+
+function showEvTooltip(mouseEvent, evId) {
+  const ev = data.events.find(x => x.id === evId);
+  if (!ev) return;
+  const names    = (ev.assignedStaff || []).map(id => staffName(id)).filter(n => n !== '?');
+  const required = (ev.requiredStaff || []).map(r => `${r.count}× ${r.role}`).join(', ');
+  const dayShifts = data.shifts
+    .filter(s => s.date === ev.date && !ABSENCE_ROLES.has(s.role))
+    .sort((a, b) => (a.start||'').localeCompare(b.start||''));
+  const technik = dayShifts
+    .filter(s => s.role === 'Technik' || s.role === 'Eintreffen Technik')
+    .map(s => staffName(s.staffId)).filter(n => n !== '?');
+  const absences = data.shifts
+    .filter(s => s.date === ev.date && ABSENCE_ROLES.has(s.role))
+    .map(s => `${staffName(s.staffId)} (${s.role})`);
+  const t = document.getElementById('ev-tooltip');
+  t.innerHTML =
+    `<div class="tt-title">${esc(ev.title)}</div>` +
+    `<div class="tt-meta">${esc(formatDate(ev.date))}</div>` +
+    `<div class="tt-meta">${esc(formatTime(ev.start))} – ${esc(formatTime(ev.end))} · ${esc(ev.type || '')}</div>` +
+    (ev.veranstalter ? `<div class="tt-meta">🏢 ${esc(ev.veranstalter)}</div>` : '') +
+    (technik.length  ? `<div class="tt-meta" style="color:#f39c12">🔧 Technik: ${esc(technik.join(', '))}</div>` : '') +
+    (ev.notes        ? `<div class="tt-note">${esc(ev.notes)}</div>` : '') +
+    (required        ? `<div class="tt-note">Benötigt: ${esc(required)}</div>` : '') +
+    (names.length    ? `<div class="tt-note">✓ Besetzt: ${esc(names.join(', '))}</div>` : '') +
+    (dayShifts.length ? `<div class="tt-note"><strong>Dienstplan:</strong><br>` +
+      dayShifts.map(s => {
+        const c = staffColor(s.staffId);
+        return `<span style="color:${esc(c)}">${esc(staffName(s.staffId))}</span>` +
+          `: ${esc(s.start||'—')}–${esc(s.end||'—')}${s.role ? ` · ${esc(s.role)}` : ''}`;
+      }).join('<br>') + '</div>' : '') +
+    (absences.length ? `<div class="tt-note" style="color:#888">Abwesend: ${esc(absences.join(', '))}</div>` : '');
+  positionTooltip(mouseEvent, t);
+  t.style.display = 'block';
+}
+
+function showShiftTooltip(mouseEvent, shiftId) {
+  const s = data.shifts.find(x => x.id === shiftId);
+  if (!s) return;
+  const ev     = s.eventId ? data.events.find(x => x.id === s.eventId) : null;
+  const isAbs  = ABSENCE_ROLES.has(s.role);
+  const color  = staffColor(s.staffId);
+  const t      = document.getElementById('ev-tooltip');
+  t.innerHTML  =
+    `<div class="tt-title" style="color:${esc(color)}">${esc(staffName(s.staffId))}</div>` +
+    (isAbs
+      ? `<div class="tt-meta" style="color:${esc(ABSENCE_COLORS[s.role]||'#888')}">${esc(s.role)}</div>` +
+        `<div class="tt-meta">${esc(formatDate(s.date))}</div>`
+      : `<div class="tt-meta">${esc(formatDate(s.date))} · ${esc(s.start||'—')}–${esc(s.end||'—')}</div>` +
+        (s.role ? `<div class="tt-meta">Rolle: ${esc(s.role)}</div>` : '')) +
+    (ev ? `<div class="tt-note">📅 ${esc(ev.title)}</div>` : '') +
+    (s.notes ? `<div class="tt-note">${esc(s.notes)}</div>` : '');
+  positionTooltip(mouseEvent, t);
+  t.style.display = 'block';
+}
+
+function positionTooltip(e, t) {
+  const x = Math.min(e.clientX + 14, window.innerWidth  - 300);
+  const y = Math.min(e.clientY + 14, window.innerHeight - 220);
+  t.style.left = x + 'px';
+  t.style.top  = y + 'px';
+}
+
+function hideTooltip() {
+  const t = document.getElementById('ev-tooltip');
+  if (t) t.style.display = 'none';
+}
+
+document.addEventListener('mousemove', e => {
+  const t = document.getElementById('ev-tooltip');
+  if (t && t.style.display !== 'none') positionTooltip(e, t);
+});
 
 // ── Select-Optionen einmalig befüllen ─────────
 

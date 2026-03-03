@@ -33,6 +33,9 @@ header {
   align-items: center;
   gap: 24px;
   border-bottom: 2px solid var(--accent);
+  position: sticky;
+  top: 0;
+  z-index: 50;
 }
 
 header h1 {
@@ -347,6 +350,109 @@ textarea { resize: vertical; min-height: 60px; }
 
 .roster-table tr:hover td { background: rgba(255,255,255,0.03); }
 
+/* ── Dienstplan: Wochenansicht ── */
+.week-grid {
+  display: grid;
+  grid-template-columns: 110px repeat(7, 1fr);
+  gap: 3px;
+  overflow-x: auto;
+}
+
+.week-cell-header {
+  background: var(--surface2);
+  padding: 7px 6px;
+  font-size: 0.73rem;
+  font-weight: 600;
+  text-align: center;
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+
+.week-cell-header.today { background: var(--accent); color: #fff; }
+
+.week-staff-label {
+  padding: 8px 10px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  background: var(--surface);
+  border-radius: 4px;
+}
+
+.week-cell {
+  background: var(--surface);
+  border-radius: 4px;
+  padding: 3px;
+  min-height: 42px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.week-cell.today { background: rgba(233,69,96,0.08); }
+
+.shift-pill {
+  border-radius: 3px;
+  padding: 2px 5px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: default;
+}
+
+/* ── Dienstplan: Monatsansicht ── */
+.month-view {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 3px;
+}
+
+.month-weekday-header {
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  padding: 8px 4px;
+}
+
+.month-day-cell {
+  background: var(--surface);
+  border-radius: 6px;
+  padding: 5px;
+  min-height: 80px;
+  cursor: pointer;
+  border: 1px solid transparent;
+}
+
+.month-day-cell:hover { border-color: var(--accent2); }
+.month-day-cell.today { border-color: var(--accent); }
+.month-day-cell.other-month { background: transparent; cursor: default; }
+
+.month-day-num {
+  font-size: 0.78rem;
+  font-weight: 700;
+  margin-bottom: 3px;
+  color: var(--text-muted);
+}
+
+.month-day-cell.today .month-day-num { color: var(--accent); }
+
+.month-shift-dot {
+  font-size: 0.65rem;
+  color: #fff;
+  border-radius: 2px;
+  padding: 1px 3px;
+  margin-bottom: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+}
+
 /* ── Utility ── */
 .section-header {
   display: flex;
@@ -370,3 +476,59 @@ textarea { resize: vertical; min-height: 60px; }
 .mt8 { margin-top: 8px; }
 .mt16 { margin-top: 16px; }
 .mt24 { margin-top: 24px; }
+
+/* ── Event Tooltip ── */
+#ev-tooltip {
+  position: fixed;
+  z-index: 200;
+  display: none;
+  background: var(--surface);
+  border: 1px solid var(--accent2);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  max-width: 280px;
+  pointer-events: none;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  font-size: 0.85rem;
+  line-height: 1.5;
+}
+#ev-tooltip .tt-title { font-weight: 700; margin-bottom: 4px; color: var(--accent); }
+#ev-tooltip .tt-meta  { font-size: 0.78rem; color: var(--text-muted); }
+#ev-tooltip .tt-note  { font-size: 0.78rem; margin-top: 6px; border-top: 1px solid #2a2a4a; padding-top: 6px; }
+
+/* ── Week view: Veranstaltungs-Zeile ── */
+.week-event-row {
+  background: rgba(83,52,131,0.55);
+  border-radius: 4px;
+  padding: 4px 7px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #e0cfff;
+  border-left: 3px solid #8b68e0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.week-event-row:hover { background: rgba(83,52,131,0.8); }
+
+/* ── Month view: Veranstaltungs-Label ── */
+.month-event-label {
+  background: rgba(83,52,131,0.55);
+  border-radius: 3px;
+  padding: 2px 4px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #e0cfff;
+  border-left: 2px solid #8b68e0;
+  margin-bottom: 2px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.month-event-label:hover { background: rgba(83,52,131,0.8); }
+
+/* ── Klickbares Item ── */
+.item-clickable { cursor: pointer; }
+.item-clickable:hover { border-color: var(--accent); }
