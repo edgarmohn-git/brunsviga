@@ -106,5 +106,61 @@ function getSeedEvents() {
     ev('s83', 'Kinderdisko',                         '2026-09-19', '16:00', '18:00', 'Sonstiges', 'für 3- bis 8-Jährige'),
     ev('s84', 'Vintage Bazar',                       '2026-09-20', '11:00', '18:00', 'Sonstiges', 'Original Vintage Bazar'),
     ev('s85', 'Jochen Malmsheimer',                  '2026-09-23', '20:00', '23:00', 'Comedy',    ''),
+
+    // ── JANUAR 2026 (aus Jörgs Dienstplan) ──────────────────
+    ev('sp01', 'XMAS-Nachfeier',                     '2026-01-08', '17:00', '20:00', 'Party',     ''),
+    ev('sp02', 'Fettnapf & Planetview',               '2026-01-09', '19:00', '21:30', 'Konzert',   'Einlass: 18:00'),
+    ev('sp03', 'Planetview',                          '2026-01-10', '20:00', '22:30', 'Konzert',   'Einlass: 19:00'),
+    ev('sp04', 'Planetview',                          '2026-01-11', '20:00', '22:30', 'Konzert',   'Einlass: 19:00'),
+    ev('sp05', 'Speeddating',                         '2026-01-14', '',      '',      'Sonstiges', ''),
+    ev('sp06', 'Götz Widmann',                        '2026-01-15', '20:00', '22:30', 'Comedy',    'Einlass: 19:00'),
+    ev('sp07', 'Alicja Heldt',                        '2026-01-16', '20:00', '22:30', 'Konzert',   'Einlass: 19:00'),
+    ev('sp08', 'Martin Sierp',                        '2026-01-17', '20:00', '22:30', 'Comedy',    'Einlass: 19:00'),
+    ev('sp09', 'Geert Schröder',                      '2026-01-18', '',      '',      'Comedy',    ''),
+    ev('sp10', 'Betriebsversammlung & Rudelsingen',   '2026-01-21', '19:30', '22:00', 'Konzert',   'Einlass: 18:30'),
+    ev('sp11', 'Matti Klein Trio',                    '2026-01-23', '20:00', '22:30', 'Konzert',   'Einlass: 19:00'),
+    ev('sp12', 'Kinderdisko',                         '2026-01-24', '16:00', '18:30', 'Party',     'Einlass: 15:00'),
+    ev('sp13', 'Florian Hacke',                       '2026-01-25', '19:00', '21:30', 'Comedy',    'Einlass: 18:00'),
+    ev('sp14', 'Tobias Mann',                         '2026-01-29', '20:00', '22:30', 'Comedy',    'Einlass: 19:00'),
+    ev('sp15', 'Tanzend ins Wochenende',              '2026-01-30', '20:00', '22:30', 'Party',     'Einlass: 19:30'),
+    ev('sp16', 'GTD Comedy Slam',                     '2026-01-31', '20:00', '22:30', 'Comedy',    'Einlass: 19:00'),
+
+    // ── FEBRUAR 2026 (aus Jörgs Dienstplan) ─────────────────
+    ev('sp17', 'HG Butzko',                           '2026-02-01', '19:00', '21:30', 'Comedy',    'Einlass: 18:00'),
+    ev('sp18', 'DESiMOs Spezial Club',                '2026-02-03', '20:00', '22:30', 'Comedy',    'Einlass: 19:00'),
+    ev('sp19', 'Zärtlichkeiten mit Freunden',         '2026-02-05', '20:00', '22:30', 'Comedy',    'Einlass: 19:00'),
+    ev('sp20', 'Glassblassing',                       '2026-02-06', '20:00', '22:30', 'Konzert',   'Einlass: 19:00'),
+    ev('sp21', 'Meike Köster',                        '2026-02-07', '20:00', '22:30', 'Comedy',    'Einlass: 19:00'),
+    ev('sp22', 'Michael Krebs',                       '2026-02-08', '19:00', '21:30', 'Comedy',    'Einlass: 18:00'),
+    ev('sp23', 'DAV Vortrag',                         '2026-02-09', '20:00', '22:30', 'Lesung',    'Einlass: 19:00'),
+    ev('sp24', 'Bartel / Textonia',                   '2026-02-12', '20:00', '22:30', 'Konzert',   'Einlass: 19:00'),
+    ev('sp25', 'Iontach',                             '2026-02-13', '20:00', '22:30', 'Konzert',   'Einlass: 19:30'),
+    ev('sp26', 'Studiobühne Proben',                  '2026-02-18', '',      '',      'Probe',     ''),
+    ev('sp27', 'Nicole Jäger',                        '2026-02-19', '20:00', '22:30', 'Comedy',    'Einlass: 19:00'),
+    ev('sp28', 'Flinta Party Foyer',                  '2026-02-20', '20:00', '22:30', 'Party',     'Einlass: 19:30'),
+    ev('sp29', 'Vossi / Krimi Dinner',                '2026-02-21', '18:00', '20:30', 'Theater',   'Einlass: 17:30'),
+    ev('sp30', 'Reinhard Pantke',                     '2026-02-22', '17:30', '20:00', 'Comedy',    'Einlass: 16:30'),
+    ev('sp31', 'Komische Nacht',                      '2026-02-24', '19:30', '22:00', 'Comedy',    'Einlass: 18:30'),
+    ev('sp32', 'Zymny',                               '2026-02-25', '20:00', '22:30', 'Kabarett',  'Einlass: 19:00'),
+    ev('sp33', 'Patagonien Vortrag',                  '2026-02-26', '19:30', '22:00', 'Lesung',    'Einlass: 18:30'),
+    ev('sp34', 'Friedemann Weise',                    '2026-02-27', '20:00', '22:30', 'Comedy',    'Einlass: 19:00'),
+    ev('sp35', 'La Signora',                          '2026-02-28', '20:00', '22:30', 'Theater',   'Einlass: 19:00'),
+  ];
+}
+
+// ── Personal-Seed (aus Jörgs Dienstplan) ──────────────────────
+// Wird beim ersten Start eingespielt, wenn data.staff.length === 0
+
+function getSeedStaff() {
+  function st(id, name, role, phone, notes) {
+    return { id, name, role: role || '', phone: phone || '', notes: notes || '', active: true };
+  }
+  return [
+    st('p01', 'Jörg',      'Leitung',   '', 'Leiter der Brunsviga'),
+    st('p02', 'Matthias',  'Springer',  '', 'Technik + allgemeine Aufgaben'),
+    st('p03', 'Alexander', 'Technik',   '', ''),
+    st('p04', 'Ahri',      'Service',   '', ''),
+    st('p05', 'Lale',      'Kasse',     '', ''),
+    st('p06', 'Patrick',   'Springer',  '', 'Gelegentlich'),
   ];
 }

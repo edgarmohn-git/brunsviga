@@ -66,10 +66,14 @@ function load() {
       setSyncStatus('error', 'Lokale Daten beschädigt');
     }
   }
-  if (data.events.length === 0 && typeof getSeedEvents === 'function') {
-    data.events = getSeedEvents();
-    data.lastModified = Date.now();
-    localStorage.setItem(STORE_KEY, JSON.stringify(data));
+  // Seed nur beim echten Erststart (beide Arrays leer)
+  if (data.events.length === 0) {
+    if (typeof getSeedEvents === 'function') data.events = getSeedEvents();
+    if (typeof getSeedStaff  === 'function') data.staff  = getSeedStaff();
+    if (data.events.length > 0 || data.staff.length > 0) {
+      data.lastModified = Date.now();
+      localStorage.setItem(STORE_KEY, JSON.stringify(data));
+    }
   }
 }
 
@@ -796,8 +800,8 @@ async function loadVersionHistory() {
           <div class="item-title" style="font-size:0.88rem">${esc(ts)}${label}</div>
           ${(added || deleted) ? `<div class="item-meta">+${added || 0} / -${deleted || 0} Zeichen</div>` : ''}
         </div>
-        ${i > 0 ? `<button class="btn btn-ghost btn-sm" data-version="${esc(v.version)}"
-          onclick="restoreVersion(this.dataset.version, '${esc(ts)}')">Wiederherstellen</button>` : ''}
+        ${i > 0 ? `<button class="btn btn-ghost btn-sm" data-version="${esc(v.version)}" data-ts="${esc(ts)}"
+          onclick="restoreVersion(this.dataset.version, this.dataset.ts)">Wiederherstellen</button>` : ''}
       </div>`;
     }).join('');
   } catch(e) {
