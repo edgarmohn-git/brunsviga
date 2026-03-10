@@ -1,5 +1,5 @@
 // build.js — bündelt alle Dateien in eine einzige HTML-Datei
-// Danach läuft staticrypt darüber für den Passwortschutz.
+// Kein staticrypt mehr — Zugangsschutz über Cloudflare Access.
 // Aufruf: node build.js
 
 const fs = require('fs');
@@ -24,7 +24,9 @@ html = html.replace(
   `<script>\n${seed}\n${appjs}\n</script>`
 );
 
-const outFile = path.join(dir, 'bundle.html');
+// Direkt nach docs/ schreiben (Cloudflare Pages Deploy-Ziel)
+fs.mkdirSync(path.join(dir, 'docs'), { recursive: true });
+const outFile = path.join(dir, 'docs', 'index.html');
 fs.writeFileSync(outFile, html, 'utf8');
-console.log('✓ Bundle erstellt: bundle.html');
+console.log('✓ Build fertig: docs/index.html');
 console.log('  Dateigröße:', Math.round(fs.statSync(outFile).size / 1024), 'KB');
