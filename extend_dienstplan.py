@@ -3,8 +3,13 @@
 extend_dienstplan.py
 Erweitert den Brunsviga-Dienstplan um neue Wochen (4.5.26 – 31.12.26)
 und füllt Veranstaltungs- und Show-Zeilen ein.
-
 Keine externen Abhängigkeiten — nur Python 3 stdlib.
+
+Wochenblock-Struktur (16 Zeilen + 1 Trenner):
+  A-Woche (grün): ce6-Datumszellen, ce7-Labels, ce20-Wochentage
+  B-Woche (blau): ce9-Datumszellen, ce10-Labels, ce22-Wochentage
+  Persönliche Zellen: ce12-Label, ce23-Daten
+  Event-Blöcke: Technik/Einlass/Show: ce8-Label, ce12-Daten
 
 Verwendung:
   python3 extend_dienstplan.py
@@ -20,8 +25,8 @@ import urllib.request
 
 DEFAULT_SOURCE = '260118 Dienstplan__ M_A_J_neo-1.ods'
 DEFAULT_OUTPUT = 'Dienstplan_erweitert.ods'
-START_DATE     = date(2026, 5, 4)    # erster Montag
-END_DATE       = date(2026, 12, 31)  # letzter Tag
+START_DATE     = date(2026, 5, 4)    # erster Montag nach bestehendem Sheet
+END_DATE       = date(2026, 12, 31)
 
 BASE_URL = 'https://www.brunsviga-kulturzentrum.de'
 
@@ -30,6 +35,9 @@ MONTH_DE = {
     'Juli':7,'August':8,'September':9,'Oktober':10,'November':11,'Dezember':12,
 }
 WEEKDAYS_DE = ['Montag','Dienstag','Mittwoch','Donnerstag','Freitag','Samstag','Sonntag']
+
+# Personal-Zeilen (Label + 7 leere Datenzellen)
+PERSONAL = ['Jörg', 'Matthias', 'Ahri', 'Lale', 'Tim']
 
 # ─── Web-Scraping ─────────────────────────────────────────────────────────────
 
@@ -40,13 +48,11 @@ def fetch(url):
 
 
 def parse_month_html(html):
-    """Parst einen Kalender-Monat.
-    Gibt zurück: (year, month, events_dict, next_url)
-
+    """Parst einen Kalender-Monat → (year, month, events_dict, next_url)
     events_dict: {date: [{'title': str, 'time': str|None, 'url': str}, ...]}
 
     WICHTIG: dayN = Wochentagsspalte (1=Mo...7=So), NICHT Monatstag!
-    Der Monatstag steht als erste Zahl im TD-Text-Inhalt.
+    Monatstag = erste Zahl im TD-Textinhalt.
     """
     m = re.search(r'<li>(\w+)\s+(\d{4})</li>', html)
     year = month = None
@@ -55,12 +61,9 @@ def parse_month_html(html):
         year  = int(m.group(2))
 
     events = {}
-
     if year and month:
         for cell_html in re.findall(
                 r'<td class="day\d+ curmonth[^"]*">(.*?)</td>', html, re.DOTALL):
-
-            # Monatstag = erste Zahl im Zellen-Text
             day_m = re.match(r'\s*(\d{1,2})\b', cell_html)
             if not day_m:
                 continue
@@ -68,7 +71,6 @@ def parse_month_html(html):
                 d = date(year, month, int(day_m.group(1)))
             except ValueError:
                 continue
-
             for a_tag, a_content in re.findall(
                     r'(<a\b[^>]*class="noarrow"[^>]*>)(.*?)</a>',
                     cell_html, re.DOTALL):
@@ -76,30 +78,25 @@ def parse_month_html(html):
                 href_m  = re.search(r'href="([^"]+)"',  a_tag)
                 if not title_m or not href_m:
                     continue
-
                 title = title_m.group(1).strip()
                 if title.lower().startswith('download'):
                     continue
-
                 time_m = re.search(
                     r'<span class="date[^"]*">(\d{1,2}:\d{2})\s*Uhr</span>',
                     a_content)
-                time_str = time_m.group(1) if time_m else None
-
                 if d not in events:
                     events[d] = []
-                events[d].append({'title': title, 'time': time_str,
+                events[d].append({'title': title,
+                                  'time': time_m.group(1) if time_m else None,
                                   'url': href_m.group(1)})
 
     m2 = re.search(r'class="next".*?CalendarNav\([\'"]([^\'"]+)[\'"]',
                    html, re.DOTALL)
     next_url = (BASE_URL + m2.group(1).replace('&amp;', '&')) if m2 else None
-
     return year, month, events, next_url
 
 
 def scrape_events():
-    """Scrape events from current month until December 2026."""
     all_events = {}
     url = BASE_URL + '/programm/'
     for i in range(20):
@@ -115,9 +112,7 @@ def scrape_events():
             print(f'  → {mo:02d}/{yr}: {len(events)} Tage, {total} Events')
             if yr == 2026 and mo >= 5:
                 all_events.update(events)
-            if yr == 2026 and mo >= 12:
-                break
-            if yr > 2026:
+            if (yr == 2026 and mo >= 12) or yr > 2026:
                 break
         if not next_url:
             break
@@ -126,115 +121,122 @@ def scrape_events():
 
 
 def load_json(path):
-    """Lädt Events aus brunsviga_events.json."""
     with open(path, encoding='utf-8') as f:
         data = json.load(f)
-    return {
-        date.fromisoformat(k): v
-        for k, v in data['events'].items()
-    }
+    return {date.fromisoformat(k): v for k, v in data['events'].items()}
 
 
-# ─── XML-Zeilengenerierung ────────────────────────────────────────────────────
+# ─── XML-Hilfsfunktionen ──────────────────────────────────────────────────────
 
 TRAILING = '<table:table-cell table:number-columns-repeated="1016"/>'
-
-
-def date_display(d):
-    return f'{d.day}.{d.month}.{str(d.year)[2:]}'
-
-
-def date_cell(d):
-    return (
-        f'<table:table-cell table:style-name="ce9"'
-        f' office:value-type="date" office:date-value="{d.isoformat()}">'
-        f'<text:p>{date_display(d)}</text:p></table:table-cell>'
-    )
-
-
-def str_cell(style, text):
-    return (
-        f'<table:table-cell table:style-name="{style}"'
-        f' office:value-type="string">'
-        f'<text:p>{_esc(text)}</text:p></table:table-cell>'
-    )
-
-
-def empty_cell(style):
-    return f'<table:table-cell table:style-name="{style}"/>'
-
-
-def empty_repeat(style, n):
-    return (f'<table:table-cell table:style-name="{style}"'
-            f' table:number-columns-repeated="{n}"/>')
 
 
 def _esc(s):
     return s.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
 
 
-def row(inner):
-    return f'<table:table-row table:style-name="ro2">{inner}</table:table-row>'
+def date_display(d):
+    return f'{d.day}.{d.month}.{str(d.year)[2:]}'
+
+
+def mk_row(inner, style='ro2'):
+    return f'<table:table-row table:style-name="{style}">{inner}</table:table-row>'
 
 
 def separator():
-    return ('<table:table-row table:style-name="ro1">'
-            '<table:table-cell table:number-columns-repeated="1024"/>'
-            '</table:table-row>')
+    return mk_row('<table:table-cell table:number-columns-repeated="1024"/>', 'ro1')
+
+
+def date_cell(d, ce):
+    return (f'<table:table-cell table:style-name="{ce}"'
+            f' office:value-type="date" office:date-value="{d.isoformat()}">'
+            f'<text:p>{date_display(d)}</text:p></table:table-cell>')
+
+
+def str_cell(ce, text):
+    return (f'<table:table-cell table:style-name="{ce}"'
+            f' office:value-type="string">'
+            f'<text:p>{_esc(text)}</text:p></table:table-cell>')
+
+
+def empty_cell(ce):
+    return f'<table:table-cell table:style-name="{ce}"/>'
+
+
+def empty_repeat(ce, n):
+    return f'<table:table-cell table:style-name="{ce}" table:number-columns-repeated="{n}"/>'
 
 
 # ─── Wochen-Block bauen ───────────────────────────────────────────────────────
 
-def make_week_block(mon, events):
-    """17 XML-Zeilen für eine Woche (Mon–Son).
-    mon    : date-Objekt für Montag
-    events : {date: [{'title': str, 'time': str|None, ...}, ...]}
+def make_week_block(mon, events, week_idx):
+    """16 Zeilen + Trenner für eine Woche (Mo–So).
+    week_idx % 2 == 0  →  A-Woche (grün): ce6/ce7/ce20
+    week_idx % 2 == 1  →  B-Woche (blau): ce9/ce10/ce22
     """
     week = [mon + timedelta(days=i) for i in range(7)]
-    out  = []
+    green = (week_idx % 2 == 0)
 
-    # ── Dienstplan-Block (Rows 1–8) ──────────────────────
+    # Farb-Styles je nach A/B
+    ce_date = 'ce6' if green else 'ce9'    # Datumszellen
+    ce_lbl  = 'ce7' if green else 'ce10'  # Event-Zeilen-Label + Wochentag-Label
+    ce_wday = 'ce20' if green else 'ce22' # Wochentag-Zellen
 
-    date_row = empty_cell('ce9') + ''.join(date_cell(d) for d in week) + TRAILING
-    out.append(row(date_row))
+    out = []
 
-    wd_row = empty_cell('ce10') + ''.join(str_cell('ce22', wd) for wd in WEEKDAYS_DE) + TRAILING
-    out.append(row(wd_row))
+    # ── Block 1: Dienstplan ─────────────────────────────────────────────
 
-    for name in ['Jörg', 'Matthias', 'Ahri', 'Lale', 'Tim']:
-        out.append(row(str_cell('ce12', name) + empty_repeat('ce23', 7) + TRAILING))
+    # Row 1: Datumszeile
+    date_row = (empty_cell(ce_date)
+                + ''.join(date_cell(d, ce_date) for d in week)
+                + TRAILING)
+    out.append(mk_row(date_row))
 
-    out.append(row(str_cell('ce8', 'Einlasshilfe') + empty_repeat('ce21', 7) + TRAILING))
+    # Row 2: Wochentage
+    wd_row = (empty_cell(ce_lbl)
+              + ''.join(str_cell(ce_wday, wd) for wd in WEEKDAYS_DE)
+              + TRAILING)
+    out.append(mk_row(wd_row))
 
-    # ── Veranstaltungs-Block (Rows 9–16) ─────────────────
+    # Rows 3–7: Personal (Jörg, Matthias, Ahri, Lale, Tim)
+    for name in PERSONAL:
+        out.append(mk_row(str_cell('ce12', name) + empty_repeat('ce23', 7) + TRAILING))
 
-    out.append(row(date_row))
-    out.append(row(wd_row))
+    # Row 8: Einlasshilfe
+    out.append(mk_row(str_cell('ce8', 'Einlasshilfe') + empty_repeat('ce23', 7) + TRAILING))
+
+    # ── Block 2: Veranstaltung ──────────────────────────────────────────
+
+    # Row 9: Datumszeile (identisch)
+    out.append(mk_row(date_row))
+
+    # Row 10: Wochentage (identisch)
+    out.append(mk_row(wd_row))
 
     # Row 11: Veranstaltung
-    ev_cells = str_cell('ce10', 'Veranstaltung')
+    ev_cells = str_cell(ce_lbl, 'Veranstaltung')
     for d in week:
         ev_list = events.get(d, [])
         if ev_list:
-            ev_cells += str_cell('ce10', ' / '.join(e['title'] for e in ev_list))
+            ev_cells += str_cell(ce_lbl, ' / '.join(e['title'] for e in ev_list))
         else:
-            ev_cells += empty_cell('ce10')
+            ev_cells += empty_cell(ce_lbl)
     ev_cells += TRAILING
-    out.append(row(ev_cells))
+    out.append(mk_row(ev_cells))
 
     # Row 12: Veranstalter (leer)
-    out.append(row(str_cell('ce10', 'Veranstalter') + empty_repeat('ce10', 7) + TRAILING))
+    out.append(mk_row(str_cell(ce_lbl, 'Veranstalter') + empty_repeat(ce_lbl, 7) + TRAILING))
 
     # Row 13: Technik (leer)
-    out.append(row(str_cell('ce8', 'Technik') + empty_repeat('ce12', 7) + TRAILING))
+    out.append(mk_row(str_cell('ce8', 'Technik') + empty_repeat('ce12', 7) + TRAILING))
 
     # Row 14: Eintreffen Technik (leer)
-    out.append(row(str_cell('ce8', 'Eintreffen Technik ') + empty_repeat('ce12', 7) + TRAILING))
+    out.append(mk_row(str_cell('ce8', 'Eintreffen Technik ') + empty_repeat('ce12', 7) + TRAILING))
 
-    # Row 15: Einlass (leer)
-    out.append(row(str_cell('ce8', 'Einlass ') + empty_repeat('ce12', 7) + TRAILING))
+    # Row 15: Einlass (leer — Website liefert keine Einlasszeiten)
+    out.append(mk_row(str_cell('ce8', 'Einlass ') + empty_repeat('ce12', 7) + TRAILING))
 
-    # Row 16: Show — mit Zeit aus Website
+    # Row 16: Show — Startzeiten aus Website
     show_cells = str_cell('ce8', 'Show')
     for d in week:
         ev_list = events.get(d, [])
@@ -244,7 +246,7 @@ def make_week_block(mon, events):
         else:
             show_cells += empty_cell('ce12')
     show_cells += TRAILING
-    out.append(row(show_cells))
+    out.append(mk_row(show_cells))
 
     # Row 17: Trenner
     out.append(separator())
@@ -261,30 +263,28 @@ def extend_ods(source, output, events):
         raw = z.read('content.xml').decode('utf-8')
         all_files = {n: z.read(n) for n in z.namelist()}
 
+    # Einfügepunkt: direkt vor dem riesigen Leerzeilen-Block am Ende
     m = re.search(r'<table:table-row[^>]+table:number-rows-repeated="\d{5,}"', raw)
-    if m:
-        insert_pos = m.start()
-    else:
-        insert_pos = raw.rfind('</table:table>')
-
+    insert_pos = m.start() if m else raw.rfind('</table:table>')
     print(f'Einfügepunkt: XML-Position {insert_pos}')
 
+    # Wochenblöcke generieren
     blocks = []
     current = START_DATE
+    week_idx = 0
     filled_days = 0
-    weeks = 0
 
     while current <= END_DATE:
-        blocks.append(make_week_block(current, events))
+        blocks.append(make_week_block(current, events, week_idx))
         for i in range(7):
             if (current + timedelta(days=i)) in events:
                 filled_days += 1
         current += timedelta(weeks=1)
-        weeks += 1
+        week_idx += 1
 
     last_monday = current - timedelta(weeks=1)
     last_sunday = last_monday + timedelta(days=6)
-    print(f'{weeks} Wochen-Blöcke: {START_DATE.strftime("%d.%m.%y")} – '
+    print(f'{week_idx} Wochen: {START_DATE.strftime("%d.%m.%y")} – '
           f'{last_sunday.strftime("%d.%m.%y")}')
     print(f'{filled_days} Tage mit Website-Events vorausgefüllt')
 
@@ -310,7 +310,6 @@ def main():
     source = args[0] if len(args) > 0 else DEFAULT_SOURCE
     output = args[1] if len(args) > 1 else DEFAULT_OUTPUT
 
-    # JSON-Option: --json <datei>
     json_file = None
     for i, f in enumerate(flags):
         if f == '--json' and i + 1 < len(flags):
@@ -324,10 +323,7 @@ def main():
     print(f'Quelle  : {source}')
     print(f'Ausgabe : {output}')
     print(f'Zeitraum: {START_DATE.strftime("%d.%m.%Y")} – {END_DATE.strftime("%d.%m.%Y")}')
-    if json_file:
-        print(f'Events  : JSON ({json_file})')
-    else:
-        print(f'Events  : Website-Scraping (Mai–Dez 2026)')
+    print(f'Farbe   : Woche 0 = A (grün/ce6), Woche 1 = B (blau/ce9), alternierend')
     print()
 
     if json_file:
